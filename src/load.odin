@@ -2,6 +2,7 @@ package main
 import "core:fmt"
 import "core:strings"
 import sdl "vendor:sdl3"
+import stb "vendor:stb/image"
 
 ShaderInfo :: struct {
 	samplers, UBOs, SBOs, STOs: u32,
@@ -66,4 +67,62 @@ gpu_buffer_upload :: proc(buffer: ^^sdl.GPUBuffer, data: rawptr, size: uint) {
 
 	sdl.EndGPUCopyPass(copyPass)
 	sdl_ensure(sdl.SubmitGPUCommandBuffer(uploadCmdBuf) != false)
+}
+load_image :: proc(path: string) -> ^sdl.GPUTexture {
+	width, height, channels: i32
+	DESIRED_CHANNELS :: 4
+	data := stb.load(
+		strings.clone_to_cstring(path, context.temp_allocator),
+		&width,
+		&height,
+		&channels,
+		DESIRED_CHANNELS, // Force RGBA
+	)
+	if data == nil {
+		panic(fmt.tprintf("Failed to load image: %v", path))
+	}
+	defer stb.image_free(data)
+
+	texture := sdl.CreateGPUTexture(
+		device,
+		sdl.GPUTextureCreateInfo {
+			type = .D2,
+			format = .R8G8B8A8_UNORM,
+			width = u32(width),
+			height = u32(height),
+			layer_count_or_depth = 1,
+			num_levels = 3,
+			usage = {.SAMPLER, .COLOR_TARGET},
+		},
+	)
+
+	image_size := width * height * DESIRED_CHANNELS
+	transferBuffer := sdl.CreateGPUTransferBuffer(
+		device,
+		sdl.GPUTransferBufferCreateInfo{usage = .UPLOAD, size = u32(image_size)},
+	)
+	defer sdl.ReleaseGPUTransferBuffer(device, transferBuffer)
+
+	// Map the transfer buffer and copy the image data
+	buffer_data := sdl.MapGPUTransferBuffer(device, transferBuffer, true)
+	sdl.memcpy(buffer_data, data, uint(image_size))
+	sdl.UnmapGPUTransferBuffer(device, transferBuffer)
+
+	// Upload the data to the texture
+	cmdBuf := sdl.AcquireGPUCommandBuffer(device)
+	copyPass := sdl.BeginGPUCopyPass(cmdBuf)
+
+	sdl.UploadToGPUTexture(
+		copyPass,
+		{offset = 0, transfer_buffer = transferBuffer},
+		{texture = texture, w = u32(width), h = u32(height), d = 1},
+		true,
+	)
+
+	sdl.EndGPUCopyPass(copyPass)
+	sdl.GenerateMipmapsForGPUTexture(cmdBuf, texture)
+
+	sdl_ensure(sdl.SubmitGPUCommandBuffer(cmdBuf) != false)
+
+	return texture
 }

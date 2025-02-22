@@ -11,11 +11,26 @@ sdl_ensure :: proc(cond: bool, message: string = "") {
 device: ^sdl.GPUDevice
 window: ^sdl.Window
 
+float2 :: [2]f32
 float3 :: [3]f32
 
-quadPositions := [4]float3{{-0.5, -0.5, 0.0}, {-0.5, 0.5, 0.0}, {0.5, -0.5, 0.0}, {0.5, 0.5, 0.0}}
-quadColors := [4]float3{{0, 0, .2}, {0, 0, .4}, {0, 0, .6}, {0, 0, .8}}
+
+TOTAL_VERTICES :: 4
+quadPositions := [TOTAL_VERTICES]float3 {
+	{-0.5, -0.5, 0.0}, // 0: bottom left
+	{-0.5, 0.5, 0.0}, // 1: top left
+	{0.5, -0.5, 0.0}, // 2: bottom right
+	{0.5, 0.5, 0.0}, // 3: top right
+}
+quadUV := [TOTAL_VERTICES]float2 {
+	{0, 1}, // 0: bottom left
+	{0, 0}, // 1: top left
+	{1, 1}, // 2: bottom right
+	{1, 0}, // 3: top right
+}
+quadColors := [TOTAL_VERTICES]float3{{0, 0, .2}, {0, 0, .4}, {0, 0, .6}, {0, 0, .8}}
 quadIndices := [6]u16{0, 1, 2, 1, 2, 3}
+
 
 main :: proc() {
 
@@ -26,7 +41,7 @@ main :: proc() {
 	sdl_ensure(window != nil)
 	defer sdl.DestroyWindow(window)
 
-	device = sdl.CreateGPUDevice({.DXIL}, true, nil)
+	device = sdl.CreateGPUDevice({.SPIRV, .DXIL}, true, nil)
 	sdl_ensure(device != nil)
 	defer sdl.DestroyGPUDevice(device)
 
@@ -34,7 +49,7 @@ main :: proc() {
 
 	vertexShader := load_shader(
 		filepath.join(
-			{"resources", "shader-binaries", "shader.vert.dxil"},
+			{"resources", "shader-binaries", "shader.vert.spv"},
 			allocator = context.temp_allocator,
 		),
 		{},
@@ -43,10 +58,10 @@ main :: proc() {
 
 	fragmentShader := load_shader(
 		filepath.join(
-			{"resources", "shader-binaries", "shader.frag.dxil"},
+			{"resources", "shader-binaries", "shader.frag.spv"},
 			allocator = context.temp_allocator,
 		),
-		{},
+		{samplers = 1, UBOs = 1},
 	)
 
 	pipeline := sdl.CreateGPUGraphicsPipeline(
@@ -61,7 +76,7 @@ main :: proc() {
 				),
 			},
 			vertex_input_state = {
-				num_vertex_buffers = 2,
+				num_vertex_buffers = 3,
 				vertex_buffer_descriptions = raw_data(
 					[]sdl.GPUVertexBufferDescription {
 						{
@@ -76,13 +91,20 @@ main :: proc() {
 							input_rate = .VERTEX,
 							pitch = size_of(float3),
 						},
+						{
+							slot = 2,
+							instance_step_rate = 0,
+							input_rate = .VERTEX,
+							pitch = size_of(float2),
+						},
 					},
 				),
-				num_vertex_attributes = 2,
+				num_vertex_attributes = 3,
 				vertex_attributes = raw_data(
 					[]sdl.GPUVertexAttribute {
 						{buffer_slot = 0, format = .FLOAT3, location = 0, offset = 0},
 						{buffer_slot = 1, format = .FLOAT3, location = 1, offset = 0},
+						{buffer_slot = 2, format = .FLOAT2, location = 2, offset = 0},
 					},
 				),
 			},
@@ -127,6 +149,36 @@ main :: proc() {
 	sdl.SetGPUBufferName(device, indices, "indices")
 	gpu_buffer_upload(&indices, raw_data(&quadIndices), size_of(quadIndices))
 
+	uvs := sdl.CreateGPUBuffer(
+		device,
+		sdl.GPUBufferCreateInfo{usage = {.VERTEX}, size = size_of(quadUV)},
+	)
+	sdl_ensure(uvs != nil)
+	defer sdl.ReleaseGPUBuffer(device, uvs)
+	sdl.SetGPUBufferName(device, uvs, "uvs")
+	gpu_buffer_upload(&uvs, raw_data(&quadUV), size_of(quadUV))
+
+
+	texture := load_image(
+		filepath.join({"resources", "images", "die-hard.jpg"}, allocator = context.temp_allocator),
+	)
+	sdl_ensure(texture != nil)
+	defer sdl.ReleaseGPUTexture(device, texture)
+
+	sampler := sdl.CreateGPUSampler(
+		device,
+		sdl.GPUSamplerCreateInfo {
+			min_filter = .LINEAR,
+			mag_filter = .LINEAR,
+			mipmap_mode = .NEAREST,
+			address_mode_u = .CLAMP_TO_EDGE,
+			address_mode_v = .CLAMP_TO_EDGE,
+			address_mode_w = .CLAMP_TO_EDGE,
+		},
+	)
+	sdl_ensure(sampler != nil)
+	defer sdl.ReleaseGPUSampler(device, sampler)
+
 
 	e: sdl.Event
 	quit := false
@@ -168,16 +220,29 @@ main :: proc() {
 		renderPass := sdl.BeginGPURenderPass(cmdBuf, &colorTargetInfo, 1, nil)
 		sdl.BindGPUGraphicsPipeline(renderPass, pipeline)
 
+		assert(positions != nil)
+		assert(colors != nil)
+		assert(uvs != nil)
+
 		bufferBindings := [?]sdl.GPUBufferBinding {
 			{buffer = positions, offset = 0},
 			{buffer = colors, offset = 0},
+			{buffer = uvs, offset = 0},
 		}
 
 		sdl.BindGPUVertexBuffers(renderPass, 0, raw_data(&bufferBindings), len(bufferBindings))
 		sdl.BindGPUIndexBuffer(renderPass, {buffer = indices, offset = 0}, ._16BIT)
 
+		assert(texture != nil)
+		assert(sampler != nil)
 
-		sdl.DrawGPUIndexedPrimitives(renderPass, len(quadIndices), 2, 0, 0, 0)
+		sdl.BindGPUFragmentSamplers(
+			renderPass,
+			0,
+			raw_data([]sdl.GPUTextureSamplerBinding{{texture = texture, sampler = sampler}}),
+			1,
+		)
+		sdl.DrawGPUIndexedPrimitives(renderPass, len(quadIndices), 1, 0, 0, 0)
 		sdl.EndGPURenderPass(renderPass)
 
 	}
