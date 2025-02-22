@@ -354,12 +354,12 @@ main :: proc() {
 
 
 		// transform := linalg.matrix_mul(scale, rotate)
-		radius: f32 : 3 // Distance from center
+		radius: f32 : 30 // Distance from center
 
 		cameraX := radius * math.cos(currRotationAngle * math.RAD_PER_DEG)
 		cameraZ := radius * math.sin(currRotationAngle * math.RAD_PER_DEG)
 
-		cameraPos := float3{cameraX, 3, cameraZ} // Keep Y height constant
+		cameraPos := float3{cameraX, 30, cameraZ} // Keep Y height constant
 
 		view := linalg.matrix4_look_at_f32(cameraPos, {0, 0, 0}, {0, 1, 0})
 		FOV :: 45
