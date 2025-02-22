@@ -77,7 +77,7 @@ main :: proc() {
 	sdl_ensure(window != nil)
 	defer sdl.DestroyWindow(window)
 
-	device = sdl.CreateGPUDevice({.SPIRV}, true, nil)
+	device = sdl.CreateGPUDevice({.SPIRV}, ODIN_DEBUG, nil)
 	sdl_ensure(device != nil)
 	defer sdl.DestroyGPUDevice(device)
 
