@@ -14,9 +14,9 @@ window: ^sdl.Window
 float3 :: [3]f32
 
 trianglePositions := [3]float3{{0.5, -0.5, 0.0}, {-0.5, -0.5, 0.0}, {0.0, 0.5, 0.0}}
+triangleColors := [3]float3{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}
 
 main :: proc() {
-	fmt.println("hello world")
 
 	width := 1280
 	height := 720
@@ -60,7 +60,7 @@ main :: proc() {
 				),
 			},
 			vertex_input_state = {
-				num_vertex_buffers = 1,
+				num_vertex_buffers = 2,
 				vertex_buffer_descriptions = raw_data(
 					[]sdl.GPUVertexBufferDescription {
 						{
@@ -69,12 +69,19 @@ main :: proc() {
 							input_rate = .VERTEX,
 							pitch = size_of(float3),
 						},
+						{
+							slot = 1,
+							instance_step_rate = 0,
+							input_rate = .VERTEX,
+							pitch = size_of(float3),
+						},
 					},
 				),
-				num_vertex_attributes = 1,
+				num_vertex_attributes = 2,
 				vertex_attributes = raw_data(
 					[]sdl.GPUVertexAttribute {
 						{buffer_slot = 0, format = .FLOAT3, location = 0, offset = 0},
+						{buffer_slot = 1, format = .FLOAT3, location = 1, offset = 0},
 					},
 				),
 			},
@@ -85,16 +92,26 @@ main :: proc() {
 	)
 
 	sdl_ensure(pipeline != nil)
+	defer sdl.ReleaseGPUGraphicsPipeline(device, pipeline)
+
 	sdl.ReleaseGPUShader(device, vertexShader)
 	sdl.ReleaseGPUShader(device, fragmentShader)
 
 
-	vertexBuffer := sdl.CreateGPUBuffer(
+	positionBuffer := sdl.CreateGPUBuffer(
 		device,
 		sdl.GPUBufferCreateInfo{usage = {.VERTEX}, size = u32(size_of(trianglePositions))},
 	)
+	defer sdl.ReleaseGPUBuffer(device, positionBuffer)
+	gpu_buffer_upload(&positionBuffer, raw_data(&trianglePositions), size_of(trianglePositions))
 
-	gpu_buffer_upload(&vertexBuffer, raw_data(&trianglePositions), size_of(trianglePositions))
+
+	colorBuffer := sdl.CreateGPUBuffer(
+		device,
+		sdl.GPUBufferCreateInfo{usage = {.VERTEX}, size = u32(size_of(triangleColors))},
+	)
+	defer sdl.ReleaseGPUBuffer(device, colorBuffer)
+	gpu_buffer_upload(&colorBuffer, raw_data(&triangleColors), size_of(triangleColors))
 
 
 	e: sdl.Event
@@ -130,12 +147,13 @@ main :: proc() {
 		}
 		renderPass := sdl.BeginGPURenderPass(cmdBuf, &colorTargetInfo, 1, nil)
 		sdl.BindGPUGraphicsPipeline(renderPass, pipeline)
-		sdl.BindGPUVertexBuffers(
-			renderPass,
-			0,
-			raw_data([]sdl.GPUBufferBinding{{buffer = vertexBuffer, offset = 0}}),
-			1,
-		)
+
+		bufferBindings := [?]sdl.GPUBufferBinding {
+			{buffer = positionBuffer, offset = 0},
+			{buffer = colorBuffer, offset = 0},
+		}
+
+		sdl.BindGPUVertexBuffers(renderPass, 0, raw_data(&bufferBindings), len(bufferBindings))
 		sdl.DrawGPUPrimitives(renderPass, 3, 1, 0, 0)
 		sdl.EndGPURenderPass(renderPass)
 

@@ -49,6 +49,7 @@ load_shader :: proc(shaderPath: string, info: ShaderInfo) -> ^sdl.GPUShader {
 }
 gpu_buffer_upload :: proc(buffer: ^^sdl.GPUBuffer, data: rawptr, size: uint) {
 	transferBuffer := sdl.CreateGPUTransferBuffer(device, {usage = .UPLOAD, size = u32(size)})
+	defer sdl.ReleaseGPUTransferBuffer(device, transferBuffer)
 
 	transferData := sdl.MapGPUTransferBuffer(device, transferBuffer, true)
 	sdl.memcpy(transferData, data, size)
@@ -65,5 +66,4 @@ gpu_buffer_upload :: proc(buffer: ^^sdl.GPUBuffer, data: rawptr, size: uint) {
 
 	sdl.EndGPUCopyPass(copyPass)
 	sdl_ensure(sdl.SubmitGPUCommandBuffer(uploadCmdBuf) != false)
-	sdl.ReleaseGPUTransferBuffer(device, transferBuffer)
 }
