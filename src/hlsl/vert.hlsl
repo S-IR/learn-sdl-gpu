@@ -1,7 +1,14 @@
-cbuffer AtlasUBO: register(b0,space1){
+
+cbuffer QuadProperties: register(b0,space1){
+    float4x4 transform; 
+}
+
+cbuffer AtlasUBO: register(b1,space1){
     float2 tileSize; 
     float2 atlasIndex;   
 }
+
+
 
 struct VSInput
 {
@@ -23,6 +30,6 @@ VSOutput main(VSInput input)
     output.color = float4(input.color,1);
     output.uv = input.uv * tileSize + atlasIndex * tileSize;;
 
-    output.position = float4(input.position, 1.0f);
+    output.position = mul(float4(input.position, 1.0f), transform);
     return output;
 }

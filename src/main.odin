@@ -1,8 +1,10 @@
 package main
 import "core:fmt"
 import "core:math"
+import "core:math/linalg"
 import "core:mem"
 import "core:path/filepath"
+import "core:time"
 import sdl "vendor:sdl3"
 
 sdl_ensure :: proc(cond: bool, message: string = "") {
@@ -50,7 +52,7 @@ tileWidth: f32 : 2
 tileHeight: f32 : 2
 
 tileSize :: float2{1.0 / tileWidth, 1.0 / tileHeight}
-
+dt: f64
 main :: proc() {
 	when ODIN_DEBUG {
 		track: mem.Tracking_Allocator
@@ -81,7 +83,7 @@ main :: proc() {
 	sdl_ensure(window != nil)
 	defer sdl.DestroyWindow(window)
 
-	device = sdl.CreateGPUDevice({.SPIRV, .DXIL}, true, nil)
+	device = sdl.CreateGPUDevice({.SPIRV}, true, nil)
 	sdl_ensure(device != nil)
 	defer sdl.DestroyGPUDevice(device)
 
@@ -92,7 +94,7 @@ main :: proc() {
 			{"resources", "shader-binaries", "shader.vert.spv"},
 			allocator = context.temp_allocator,
 		),
-		{UBOs = 1},
+		{UBOs = 2},
 	)
 
 
@@ -225,8 +227,36 @@ main :: proc() {
 
 	chosenIndex: AtlasIndex = .Dirt
 	free_all(context.temp_allocator)
+
+
+	lastFrameTime := time.now()
+	FPS :: 144
+	frameTime := time.Duration(time.Second / FPS)
+
+	currRotationAngle: f32 = 0
+	ROTATION_SPEED :: 90
+
+	counter := 0
+
 	for !quit {
+		defer {
+			frameEnd := time.now()
+			frameDuration := time.diff(frameEnd, lastFrameTime)
+
+
+			if frameDuration < frameTime {
+				sleepTime := frameTime - frameDuration
+				time.sleep(sleepTime)
+			}
+
+			// Calculate actual dt for next frame
+			dt = time.duration_seconds(time.since(lastFrameTime))
+			lastFrameTime = time.now()
+		}
+
 		for sdl.PollEvent(&e) {
+
+
 			#partial switch e.type {
 			case .QUIT:
 				quit = true
@@ -280,6 +310,19 @@ main :: proc() {
 		assert(positions != nil)
 		assert(colors != nil)
 		assert(uvs != nil)
+		currRotationAngle += f32(dt) * ROTATION_SPEED
+		rotate: matrix[4, 4]f32 = linalg.matrix4_from_euler_angles_f32(
+			0.0,
+			0.0,
+			math.RAD_PER_DEG * currRotationAngle,
+			.XYZ,
+		)
+		scale: matrix[4, 4]f32 = linalg.matrix4_scale_f32({1.5, .5, .5})
+
+
+		transform := linalg.matrix_mul(scale, rotate)
+		sdl.PushGPUVertexUniformData(cmdBuf, 0, &transform, size_of(transform))
+
 
 		bufferBindings := [?]sdl.GPUBufferBinding {
 			{buffer = positions, offset = 0},
@@ -288,7 +331,8 @@ main :: proc() {
 		}
 
 		atlasUbo: AtlasUBO = {tileSize, atlasIndex}
-		sdl.PushGPUVertexUniformData(cmdBuf, 0, &atlasUbo, size_of(atlasUbo))
+
+		sdl.PushGPUVertexUniformData(cmdBuf, 1, &atlasUbo, size_of(atlasUbo))
 
 		sdl.BindGPUVertexBuffers(renderPass, 0, raw_data(&bufferBindings), len(bufferBindings))
 		sdl.BindGPUIndexBuffer(renderPass, {buffer = indices, offset = 0}, ._16BIT)
