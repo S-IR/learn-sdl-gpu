@@ -1,9 +1,10 @@
 package main
 import "core:fmt"
+import "core:math"
 import "core:mem"
 import "core:path/filepath"
-
 import sdl "vendor:sdl3"
+
 sdl_ensure :: proc(cond: bool, message: string = "") {
 	msg := fmt.tprintf("%s:%s\n", message, sdl.GetError())
 	ensure(cond, msg)
@@ -16,7 +17,12 @@ window: ^sdl.Window
 float2 :: [2]f32
 float3 :: [3]f32
 
-
+AtlasIndex :: enum u8 {
+	Dirt,
+	Stone,
+	Grass,
+	DieHard,
+}
 TOTAL_VERTICES :: 4
 quadPositions := [TOTAL_VERTICES]float3 {
 	{-0.5, -0.5, 0.0}, // 0: bottom left
@@ -30,9 +36,20 @@ quadUV := [TOTAL_VERTICES]float2 {
 	{1, 1}, // 2: bottom right
 	{1, 0}, // 3: top right
 }
+
+
 quadColors := [TOTAL_VERTICES]float3{{0, 0, .2}, {0, 0, .4}, {0, 0, .6}, {0, 0, .8}}
 quadIndices := [6]u16{0, 1, 2, 1, 2, 3}
 
+AtlasUBO :: struct {
+	tileSize:   float2,
+	atlasIndex: float2,
+}
+
+tileWidth: f32 : 2
+tileHeight: f32 : 2
+
+tileSize :: float2{1.0 / tileWidth, 1.0 / tileHeight}
 
 main :: proc() {
 	when ODIN_DEBUG {
@@ -56,6 +73,7 @@ main :: proc() {
 			mem.tracking_allocator_destroy(&track)
 		}
 	}
+
 	width := 1280
 	height := 720
 	sdl_ensure(sdl.Init({.VIDEO}))
@@ -74,7 +92,7 @@ main :: proc() {
 			{"resources", "shader-binaries", "shader.vert.spv"},
 			allocator = context.temp_allocator,
 		),
-		{},
+		{UBOs = 1},
 	)
 
 
@@ -182,7 +200,7 @@ main :: proc() {
 
 
 	texture := load_image(
-		filepath.join({"resources", "images", "die-hard.jpg"}, allocator = context.temp_allocator),
+		filepath.join({"resources", "images", "atlas.jpg"}, allocator = context.temp_allocator),
 	)
 	sdl_ensure(texture != nil)
 	defer sdl.ReleaseGPUTexture(device, texture)
@@ -205,6 +223,7 @@ main :: proc() {
 	e: sdl.Event
 	quit := false
 
+	chosenIndex: AtlasIndex = .Dirt
 	free_all(context.temp_allocator)
 	for !quit {
 		for sdl.PollEvent(&e) {
@@ -216,6 +235,18 @@ main :: proc() {
 				if e.key.key == sdl.K_ESCAPE {
 					quit = true
 				}
+
+			// switch e.key.key {
+			// case sdl.K_A:
+			// 	chosenIndex = .Dirt
+			// case sdl.K_W:
+			// 	chosenIndex = .Stone
+			// case sdl.K_S:
+			// 	chosenIndex = .Grass
+			// case sdl.K_D:
+			// 	chosenIndex = .DieHard
+
+			// }
 			case .WINDOW_RESIZED:
 				screenWidth, screenHeight := e.window.data1, e.window.data2
 
@@ -240,6 +271,10 @@ main :: proc() {
 			store_op    = .STORE,
 		}
 		renderPass := sdl.BeginGPURenderPass(cmdBuf, &colorTargetInfo, 1, nil)
+
+		column := i32(chosenIndex) % i32(tileWidth)
+		row := i32(chosenIndex) / i32(tileWidth)
+		atlasIndex := float2{f32(column), f32(row)}
 		sdl.BindGPUGraphicsPipeline(renderPass, pipeline)
 
 		assert(positions != nil)
@@ -251,6 +286,9 @@ main :: proc() {
 			{buffer = colors, offset = 0},
 			{buffer = uvs, offset = 0},
 		}
+
+		atlasUbo: AtlasUBO = {tileSize, atlasIndex}
+		sdl.PushGPUVertexUniformData(cmdBuf, 0, &atlasUbo, size_of(atlasUbo))
 
 		sdl.BindGPUVertexBuffers(renderPass, 0, raw_data(&bufferBindings), len(bufferBindings))
 		sdl.BindGPUIndexBuffer(renderPass, {buffer = indices, offset = 0}, ._16BIT)

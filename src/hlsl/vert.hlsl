@@ -1,3 +1,8 @@
+cbuffer AtlasUBO: register(b0,space1){
+    float2 tileSize; 
+    float2 atlasIndex;   
+}
+
 struct VSInput
 {
     float3 position : TEXCOORD0;
@@ -16,7 +21,7 @@ VSOutput main(VSInput input)
 {
     VSOutput output;
     output.color = float4(input.color,1);
-    output.uv = input.uv;
+    output.uv = input.uv * tileSize + atlasIndex * tileSize;;
 
     output.position = float4(input.position, 1.0f);
     return output;
