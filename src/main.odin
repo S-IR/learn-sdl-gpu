@@ -13,8 +13,9 @@ window: ^sdl.Window
 
 float3 :: [3]f32
 
-trianglePositions := [3]float3{{0.5, -0.5, 0.0}, {-0.5, -0.5, 0.0}, {0.0, 0.5, 0.0}}
-triangleColors := [3]float3{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}
+quadPositions := [4]float3{{-0.5, -0.5, 0.0}, {-0.5, 0.5, 0.0}, {0.5, -0.5, 0.0}, {0.5, 0.5, 0.0}}
+quadColors := [4]float3{{0, 0, .2}, {0, 0, .4}, {0, 0, .6}, {0, 0, .8}}
+quadIndices := [6]u16{0, 1, 2, 1, 2, 3}
 
 main :: proc() {
 
@@ -98,20 +99,33 @@ main :: proc() {
 	sdl.ReleaseGPUShader(device, fragmentShader)
 
 
-	positionBuffer := sdl.CreateGPUBuffer(
+	positions := sdl.CreateGPUBuffer(
 		device,
-		sdl.GPUBufferCreateInfo{usage = {.VERTEX}, size = u32(size_of(trianglePositions))},
+		sdl.GPUBufferCreateInfo{usage = {.VERTEX}, size = u32(size_of(quadPositions))},
 	)
-	defer sdl.ReleaseGPUBuffer(device, positionBuffer)
-	gpu_buffer_upload(&positionBuffer, raw_data(&trianglePositions), size_of(trianglePositions))
+	sdl_ensure(positions != nil)
+	defer sdl.ReleaseGPUBuffer(device, positions)
+	gpu_buffer_upload(&positions, raw_data(&quadPositions), size_of(quadPositions))
+	sdl.SetGPUBufferName(device, positions, "positions")
 
 
-	colorBuffer := sdl.CreateGPUBuffer(
+	colors := sdl.CreateGPUBuffer(
 		device,
-		sdl.GPUBufferCreateInfo{usage = {.VERTEX}, size = u32(size_of(triangleColors))},
+		sdl.GPUBufferCreateInfo{usage = {.VERTEX}, size = u32(size_of(quadColors))},
 	)
-	defer sdl.ReleaseGPUBuffer(device, colorBuffer)
-	gpu_buffer_upload(&colorBuffer, raw_data(&triangleColors), size_of(triangleColors))
+	sdl_ensure(colors != nil)
+	defer sdl.ReleaseGPUBuffer(device, colors)
+	sdl.SetGPUBufferName(device, colors, "colors")
+	gpu_buffer_upload(&colors, raw_data(&quadColors), size_of(quadColors))
+
+	indices := sdl.CreateGPUBuffer(
+		device,
+		sdl.GPUBufferCreateInfo{usage = {.INDEX}, size = size_of(quadIndices)},
+	)
+	sdl_ensure(indices != nil)
+	defer sdl.ReleaseGPUBuffer(device, indices)
+	sdl.SetGPUBufferName(device, indices, "indices")
+	gpu_buffer_upload(&indices, raw_data(&quadIndices), size_of(quadIndices))
 
 
 	e: sdl.Event
@@ -155,12 +169,15 @@ main :: proc() {
 		sdl.BindGPUGraphicsPipeline(renderPass, pipeline)
 
 		bufferBindings := [?]sdl.GPUBufferBinding {
-			{buffer = positionBuffer, offset = 0},
-			{buffer = colorBuffer, offset = 0},
+			{buffer = positions, offset = 0},
+			{buffer = colors, offset = 0},
 		}
 
 		sdl.BindGPUVertexBuffers(renderPass, 0, raw_data(&bufferBindings), len(bufferBindings))
-		sdl.DrawGPUPrimitives(renderPass, 3, 1, 0, 0)
+		sdl.BindGPUIndexBuffer(renderPass, {buffer = indices, offset = 0}, ._16BIT)
+
+
+		sdl.DrawGPUIndexedPrimitives(renderPass, len(quadIndices), 2, 0, 0, 0)
 		sdl.EndGPURenderPass(renderPass)
 
 	}

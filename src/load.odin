@@ -21,7 +21,7 @@ load_shader :: proc(shaderPath: string, info: ShaderInfo) -> ^sdl.GPUShader {
 
 	format := sdl.GetGPUShaderFormats(device)
 	entrypoint: cstring
-	if format >= {.SPIRV} {
+	if format >= {.SPIRV} || format >= {.DXIL} {
 		entrypoint = "main"
 	} else {
 		panic("unsupported backend shader format")
