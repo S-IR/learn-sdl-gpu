@@ -10,6 +10,9 @@ struct VSOutput
 
 #ifdef VERTEX_SHADER
 
+
+StructuredBuffer<CubeData> CubesBuffer : register(t0, space0);
+
 cbuffer CameraUBO : register(b0, space1)
 {
   matrix view;
