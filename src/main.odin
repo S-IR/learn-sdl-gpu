@@ -24,7 +24,7 @@ main :: proc() {
 	sdl_ensure(window != nil)
 	defer sdl.DestroyWindow(window)
 
-	device = sdl.CreateGPUDevice({.SPIRV}, true, nil)
+	device = sdl.CreateGPUDevice({.DXIL}, true, nil)
 	sdl_ensure(device != nil)
 	defer sdl.DestroyGPUDevice(device)
 
@@ -32,7 +32,7 @@ main :: proc() {
 
 	vertexShader := load_shader(
 		filepath.join(
-			{"resources", "shader-binaries", "shader.vert.spv"},
+			{"resources", "shader-binaries", "shader.vert.dxil"},
 			allocator = context.temp_allocator,
 		),
 		{},
@@ -41,12 +41,11 @@ main :: proc() {
 
 	fragmentShader := load_shader(
 		filepath.join(
-			{"resources", "shader-binaries", "shader.frag.spv"},
+			{"resources", "shader-binaries", "shader.frag.dxil"},
 			allocator = context.temp_allocator,
 		),
 		{},
 	)
-
 	pipeline := sdl.CreateGPUGraphicsPipeline(
 		device,
 		sdl.GPUGraphicsPipelineCreateInfo {
@@ -57,6 +56,12 @@ main :: proc() {
 						{format = sdl.GetGPUSwapchainTextureFormat(device, window)},
 					},
 				),
+			},
+			rasterizer_state = {
+				fill_mode = .FILL,
+				cull_mode = .NONE,
+				enable_depth_bias = false,
+				enable_depth_clip = false,
 			},
 			vertex_input_state = {
 				num_vertex_buffers = 1,
