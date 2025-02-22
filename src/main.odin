@@ -26,7 +26,7 @@ main :: proc() {
 	sdl_ensure(window != nil)
 	defer sdl.DestroyWindow(window)
 
-	device = sdl.CreateGPUDevice({.SPIRV}, true, nil)
+	device = sdl.CreateGPUDevice({.DXIL}, true, nil)
 	sdl_ensure(device != nil)
 	defer sdl.DestroyGPUDevice(device)
 
@@ -34,7 +34,7 @@ main :: proc() {
 
 	vertexShader := load_shader(
 		filepath.join(
-			{"resources", "shader-binaries", "shader.vert.spv"},
+			{"resources", "shader-binaries", "shader.vert.dxil"},
 			allocator = context.temp_allocator,
 		),
 		{},
@@ -43,7 +43,7 @@ main :: proc() {
 
 	fragmentShader := load_shader(
 		filepath.join(
-			{"resources", "shader-binaries", "shader.frag.spv"},
+			{"resources", "shader-binaries", "shader.frag.dxil"},
 			allocator = context.temp_allocator,
 		),
 		{},
