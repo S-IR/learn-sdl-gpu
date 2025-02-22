@@ -14,10 +14,9 @@ window: ^sdl.Window
 float3 :: [3]f32
 
 trianglePositions := [3]float3{{0.5, -0.5, 0.0}, {-0.5, -0.5, 0.0}, {0.0, 0.5, 0.0}}
+triangleColors := [3]float3{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}
 
 main :: proc() {
-	fmt.println("hello world")
-
 	width := 1280
 	height := 720
 	sdl_ensure(sdl.Init({.VIDEO}))
@@ -85,6 +84,8 @@ main :: proc() {
 	)
 
 	sdl_ensure(pipeline != nil)
+
+	defer sdl.ReleaseGPUGraphicsPipeline(device, pipeline)
 	sdl.ReleaseGPUShader(device, vertexShader)
 	sdl.ReleaseGPUShader(device, fragmentShader)
 
@@ -93,6 +94,8 @@ main :: proc() {
 		device,
 		sdl.GPUBufferCreateInfo{usage = {.VERTEX}, size = u32(size_of(trianglePositions))},
 	)
+	sdl_ensure(vertexBuffer != nil)
+	defer sdl.ReleaseGPUBuffer(device, vertexBuffer)
 
 	gpu_buffer_upload(&vertexBuffer, raw_data(&trianglePositions), size_of(trianglePositions))
 
@@ -130,12 +133,9 @@ main :: proc() {
 		}
 		renderPass := sdl.BeginGPURenderPass(cmdBuf, &colorTargetInfo, 1, nil)
 		sdl.BindGPUGraphicsPipeline(renderPass, pipeline)
-		sdl.BindGPUVertexBuffers(
-			renderPass,
-			0,
-			raw_data([]sdl.GPUBufferBinding{{buffer = vertexBuffer, offset = 0}}),
-			1,
-		)
+
+		bufferBindings := [?]sdl.GPUBufferBinding{{buffer = vertexBuffer, offset = 0}}
+		sdl.BindGPUVertexBuffers(renderPass, 0, raw_data(bufferBindings[:]), len(bufferBindings))
 		sdl.DrawGPUPrimitives(renderPass, 3, 1, 0, 0)
 		sdl.EndGPURenderPass(renderPass)
 
