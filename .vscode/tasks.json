@@ -1,0 +1,38 @@
+{
+    "version": "2.0.0",
+    "command": "",
+    "args": [],
+    "tasks": [
+        {
+            "label": "mkdir",
+            "type": "shell",
+            "command": "cmd",
+            "args": [
+                "/C",
+                "if not exist .\\build mkdir .\\build"
+            ]
+        },
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "odin build . -o:none -debug -out:build/debug.exe",
+            "group": "build"
+        },
+        {
+            "label": "run",
+            "type": "shell",
+            "command": "odin run . -debug",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "Build",
+            "dependsOn": [
+                "mkdir",
+                "build"
+            ]
+        },
+    ]
+}
