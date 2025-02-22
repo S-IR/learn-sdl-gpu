@@ -18,6 +18,7 @@ window: ^sdl.Window
 
 float2 :: [2]f32
 float3 :: [3]f32
+float4 :: [4]f32
 
 AtlasIndex :: enum u8 {
 	Dirt,
@@ -25,23 +26,7 @@ AtlasIndex :: enum u8 {
 	Grass,
 	DieHard,
 }
-TOTAL_VERTICES :: 4
-quadPositions := [TOTAL_VERTICES]float3 {
-	{-0.5, -0.5, 0.0}, // 0: bottom left
-	{-0.5, 0.5, 0.0}, // 1: top left
-	{0.5, -0.5, 0.0}, // 2: bottom right
-	{0.5, 0.5, 0.0}, // 3: top right
-}
-quadUV := [TOTAL_VERTICES]float2 {
-	{0, 1}, // 0: bottom left
-	{0, 0}, // 1: top left
-	{1, 1}, // 2: bottom right
-	{1, 0}, // 3: top right
-}
-
-
-quadColors := [TOTAL_VERTICES]float3{{0, 0, .2}, {0, 0, .4}, {0, 0, .6}, {0, 0, .8}}
-quadIndices := [6]u16{0, 1, 2, 1, 2, 3}
+TOTAL_VERTICES :: 24
 
 AtlasUBO :: struct {
 	tileSize:   float2,
@@ -52,7 +37,16 @@ tileWidth: f32 : 2
 tileHeight: f32 : 2
 
 tileSize :: float2{1.0 / tileWidth, 1.0 / tileHeight}
+
+
 dt: f64
+
+
+CubeInfo :: struct {
+	atlasInde: float2,
+}
+
+
 main :: proc() {
 	when ODIN_DEBUG {
 		track: mem.Tracking_Allocator
@@ -76,8 +70,8 @@ main :: proc() {
 		}
 	}
 
-	width := 1280
-	height := 720
+	width: i32 = 1280
+	height: i32 = 720
 	sdl_ensure(sdl.Init({.VIDEO}))
 	window = sdl.CreateWindow("Learn SDL Gpu", i32(width), i32(height), {.RESIZABLE})
 	sdl_ensure(window != nil)
@@ -94,7 +88,7 @@ main :: proc() {
 			{"resources", "shader-binaries", "shader.vert.spv"},
 			allocator = context.temp_allocator,
 		),
-		{UBOs = 2},
+		{UBOs = 2, SBOs = 0},
 	)
 
 
@@ -116,7 +110,17 @@ main :: proc() {
 						{format = sdl.GetGPUSwapchainTextureFormat(device, window)},
 					},
 				),
+				has_depth_stencil_target = true,
+				depth_stencil_format = .D24_UNORM,
 			},
+			depth_stencil_state = sdl.GPUDepthStencilState {
+				enable_depth_test = true,
+				enable_depth_write = true,
+				enable_stencil_test = false,
+				compare_op = .LESS,
+				write_mask = 0xFF,
+			},
+			rasterizer_state = {cull_mode = .NONE, fill_mode = .FILL},
 			vertex_input_state = {
 				num_vertex_buffers = 3,
 				vertex_buffer_descriptions = raw_data(
@@ -163,42 +167,49 @@ main :: proc() {
 	sdl.ReleaseGPUShader(device, fragmentShader)
 
 
+	sdl.GetWindowSizeInPixels(window, &width, &height)
+	depthTexture := sdl.CreateGPUTexture(
+		device,
+		sdl.GPUTextureCreateInfo {
+			type = .D2,
+			width = u32(width),
+			height = u32(height),
+			layer_count_or_depth = 1,
+			num_levels = 1,
+			sample_count = ._1,
+			format = .D24_UNORM,
+			usage = {.DEPTH_STENCIL_TARGET},
+		},
+	)
+	defer sdl.ReleaseGPUTexture(device, depthTexture)
+
 	positions := sdl.CreateGPUBuffer(
 		device,
-		sdl.GPUBufferCreateInfo{usage = {.VERTEX}, size = u32(size_of(quadPositions))},
+		sdl.GPUBufferCreateInfo{usage = {.VERTEX}, size = u32(size_of(cubePositions))},
 	)
 	sdl_ensure(positions != nil)
 	defer sdl.ReleaseGPUBuffer(device, positions)
-	gpu_buffer_upload(&positions, raw_data(&quadPositions), size_of(quadPositions))
+	gpu_buffer_upload(&positions, raw_data(&cubePositions), size_of(cubePositions))
 	sdl.SetGPUBufferName(device, positions, "positions")
-
-
-	colors := sdl.CreateGPUBuffer(
-		device,
-		sdl.GPUBufferCreateInfo{usage = {.VERTEX}, size = u32(size_of(quadColors))},
-	)
-	sdl_ensure(colors != nil)
-	defer sdl.ReleaseGPUBuffer(device, colors)
-	sdl.SetGPUBufferName(device, colors, "colors")
-	gpu_buffer_upload(&colors, raw_data(&quadColors), size_of(quadColors))
-
-	indices := sdl.CreateGPUBuffer(
-		device,
-		sdl.GPUBufferCreateInfo{usage = {.INDEX}, size = size_of(quadIndices)},
-	)
-	sdl_ensure(indices != nil)
-	defer sdl.ReleaseGPUBuffer(device, indices)
-	sdl.SetGPUBufferName(device, indices, "indices")
-	gpu_buffer_upload(&indices, raw_data(&quadIndices), size_of(quadIndices))
 
 	uvs := sdl.CreateGPUBuffer(
 		device,
-		sdl.GPUBufferCreateInfo{usage = {.VERTEX}, size = size_of(quadUV)},
+		sdl.GPUBufferCreateInfo{usage = {.VERTEX}, size = size_of(cubeUV)},
 	)
 	sdl_ensure(uvs != nil)
 	defer sdl.ReleaseGPUBuffer(device, uvs)
 	sdl.SetGPUBufferName(device, uvs, "uvs")
-	gpu_buffer_upload(&uvs, raw_data(&quadUV), size_of(quadUV))
+	gpu_buffer_upload(&uvs, raw_data(&cubeUV), size_of(cubeUV))
+
+
+	indices := sdl.CreateGPUBuffer(
+		device,
+		sdl.GPUBufferCreateInfo{usage = {.INDEX}, size = size_of(cubeIndices)},
+	)
+	sdl_ensure(indices != nil)
+	defer sdl.ReleaseGPUBuffer(device, indices)
+	sdl.SetGPUBufferName(device, indices, "indices")
+	gpu_buffer_upload(&indices, raw_data(&cubeIndices), size_of(cubeIndices))
 
 
 	texture := load_image(
@@ -206,6 +217,7 @@ main :: proc() {
 	)
 	sdl_ensure(texture != nil)
 	defer sdl.ReleaseGPUTexture(device, texture)
+
 
 	sampler := sdl.CreateGPUSampler(
 		device,
@@ -300,7 +312,19 @@ main :: proc() {
 			load_op     = .CLEAR,
 			store_op    = .STORE,
 		}
-		renderPass := sdl.BeginGPURenderPass(cmdBuf, &colorTargetInfo, 1, nil)
+		depthStencilTargetInfo: sdl.GPUDepthStencilTargetInfo = {
+			texture          = depthTexture,
+			cycle            = true,
+			clear_depth      = 1,
+			clear_stencil    = 0,
+			load_op          = .CLEAR,
+			store_op         = .STORE,
+			stencil_load_op  = .CLEAR,
+			stencil_store_op = .STORE,
+		}
+
+
+		renderPass := sdl.BeginGPURenderPass(cmdBuf, &colorTargetInfo, 1, &depthStencilTargetInfo)
 
 		column := i32(chosenIndex) % i32(tileWidth)
 		row := i32(chosenIndex) / i32(tileWidth)
@@ -308,16 +332,15 @@ main :: proc() {
 		sdl.BindGPUGraphicsPipeline(renderPass, pipeline)
 
 		assert(positions != nil)
-		assert(colors != nil)
 		assert(uvs != nil)
 		currRotationAngle += f32(dt) * ROTATION_SPEED
 		rotate: matrix[4, 4]f32 = linalg.matrix4_from_euler_angles_f32(
-			0.0,
+			math.RAD_PER_DEG * currRotationAngle,
 			0.0,
 			math.RAD_PER_DEG * currRotationAngle,
 			.XYZ,
 		)
-		scale: matrix[4, 4]f32 = linalg.matrix4_scale_f32({1.5, .5, .5})
+		scale: matrix[4, 4]f32 = linalg.matrix4_scale_f32({1, 1, 1})
 
 
 		transform := linalg.matrix_mul(scale, rotate)
@@ -346,7 +369,7 @@ main :: proc() {
 			raw_data([]sdl.GPUTextureSamplerBinding{{texture = texture, sampler = sampler}}),
 			1,
 		)
-		sdl.DrawGPUIndexedPrimitives(renderPass, len(quadIndices), 1, 0, 0, 0)
+		sdl.DrawGPUIndexedPrimitives(renderPass, len(cubeIndices), 1, 0, 0, 0)
 		sdl.EndGPURenderPass(renderPass)
 
 	}
