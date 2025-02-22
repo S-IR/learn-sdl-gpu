@@ -34,6 +34,44 @@ cubePositions := [TOTAL_VERTICES]float3 {
 	{0.5, -0.5, -0.5}, // Bottom back right  (22)
 	{0.5, -0.5, 0.5}, // Bottom front right (23)
 }
+
+cubeColors := [TOTAL_VERTICES]float3 {
+	// front face
+	{0, 0, 0}, // Front bottom left  (0)
+	{0, 0, 0}, // Front bottom right (1)
+	{0, 0, 0}, // Front top right    (2)
+	{0, 0, 0}, // Front top left     (3)
+
+	// back face
+	{1, 0, 0}, // Back bottom left   (4)
+	{1, 0, 0}, // Back top left      (5)
+	{1, 0, 0}, // Back top right     (6)
+	{1, 0, 0}, // Back bottom right  (7)
+
+	// right face
+	{1, 1, 0}, // Right bottom back  (8)
+	{1, 1, 0}, // Right top back     (9)
+	{1, 1, 0}, // Right top front    (10)
+	{1, 1, 0}, // Right bottom front (11)
+
+	// left face
+	{1, 0, 1}, // Left bottom front  (12)
+	{1, 0, 1}, // Left top front     (13)
+	{1, 0, 1}, // Left top back      (14)
+	{1, 0, 1}, // Left bottom back   (15)
+
+	// top face
+	{1, .5, .5}, // Top back left      (16)
+	{1, .5, .5}, // Top back right     (17)
+	{1, .5, .5}, // Top front right    (18)
+	{1, .5, .5}, // Top front left     (19)
+
+	//bottom face
+	{1, .8, .8}, // Bottom front left  (20)
+	{1, .8, .8}, // Bottom back left   (21)
+	{1, .8, .8}, // Bottom back right  (22)
+	{1, .8, .8}, // Bottom front right (23)
+}
 cubeUV := [TOTAL_VERTICES]float2 {
 	//front
 	{0, 0},

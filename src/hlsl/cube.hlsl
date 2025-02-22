@@ -3,16 +3,20 @@
 
 struct VSOutput
 {
+    float3 color : TEXCOORD0;
     float2 uv : TEXCOORD1;
     float4 position : SV_Position;
 };
 
 #ifdef VERTEX_SHADER
 
+cbuffer CameraUBO : register(b0, space1)
+{
+  matrix view;
+  matrix proj;
+};
 
-cbuffer CubeUBO: register(b0,space1){
-    float4x4 transform; 
-}
+
 cbuffer AtlasUBO: register(b1,space1){
     float2 atlasTileSize; 
     float2 atlasIndex; 
@@ -21,6 +25,7 @@ cbuffer AtlasUBO: register(b1,space1){
 struct VSInput
 {
     float3 position : TEXCOORD0;
+    float3 color: TEXCOORD1;
     float2 uv : TEXCOORD2;
     uint instanceId : SV_InstanceID;
 
@@ -30,9 +35,14 @@ struct VSInput
 VSOutput main(VSInput input)
 {
     VSOutput output;
-
+    output.color = input.color;
     output.uv = input.uv * atlasTileSize + atlasIndex * atlasTileSize;
-    output.position = mul(float4(input.position,1.0),transform);
+
+    float4 worldPos= float4(input.position, 1);
+    float4 viewPos = mul(view, worldPos);
+    float4 clipPos = mul(proj, viewPos);
+
+    output.position = clipPos;
 
     return output;
 }
@@ -42,16 +52,24 @@ VSOutput main(VSInput input)
 
 Texture2D<float4> Texture : register(t0, space2);
 SamplerState Sampler : register(s0, space2);
-struct FSOutput
+struct FSOutput 
 {
   float4 color : SV_Target;
   float depth : SV_Depth;
 };
+float LinearizeDepth(float depth, float near, float far)
+{
+  float z = depth * 2.0 - 1.0;
+  return ((2.0 * near * far) / (far + near - z * (far - near))) / far;
+}
+
+#define NearPlane 0.01
+#define FarPlane 60
 FSOutput main(VSOutput input) 
 {   
     FSOutput output;
-    output.color = Texture.Sample(Sampler, input.uv);
-    output.depth = 0.2;
+    output.color = float4(input.color,1.0);
+    output.depth = LinearizeDepth(input.position.z, NearPlane, FarPlane);
     return output;
 }
 

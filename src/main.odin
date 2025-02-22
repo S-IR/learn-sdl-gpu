@@ -192,6 +192,16 @@ main :: proc() {
 	gpu_buffer_upload(&positions, raw_data(&cubePositions), size_of(cubePositions))
 	sdl.SetGPUBufferName(device, positions, "positions")
 
+	colors := sdl.CreateGPUBuffer(
+		device,
+		sdl.GPUBufferCreateInfo{usage = {.VERTEX}, size = u32(size_of(cubeColors))},
+	)
+	sdl_ensure(colors != nil)
+	defer sdl.ReleaseGPUBuffer(device, colors)
+	sdl.SetGPUBufferName(device, colors, "colors")
+	gpu_buffer_upload(&colors, raw_data(&cubeColors), size_of(cubeColors))
+
+
 	uvs := sdl.CreateGPUBuffer(
 		device,
 		sdl.GPUBufferCreateInfo{usage = {.VERTEX}, size = size_of(cubeUV)},
@@ -334,17 +344,36 @@ main :: proc() {
 		assert(positions != nil)
 		assert(uvs != nil)
 		currRotationAngle += f32(dt) * ROTATION_SPEED
-		rotate: matrix[4, 4]f32 = linalg.matrix4_from_euler_angles_f32(
-			math.RAD_PER_DEG * currRotationAngle,
-			0.0,
-			math.RAD_PER_DEG * currRotationAngle,
-			.XYZ,
+		// rotate: matrix[4, 4]f32 = linalg.matrix4_from_euler_angles_f32(
+		// 	math.RAD_PER_DEG * currRotationAngle,
+		// 	0.0,
+		// 	math.RAD_PER_DEG * currRotationAngle,
+		// 	.XYZ,
+		// )
+		// scale: matrix[4, 4]f32 = linalg.matrix4_scale_f32({1, 1, 1})
+
+
+		// transform := linalg.matrix_mul(scale, rotate)
+		radius: f32 : 3 // Distance from center
+
+		cameraX := radius * math.cos(currRotationAngle * math.RAD_PER_DEG)
+		cameraZ := radius * math.sin(currRotationAngle * math.RAD_PER_DEG)
+
+		cameraPos := float3{cameraX, 3, cameraZ} // Keep Y height constant
+
+		view := linalg.matrix4_look_at_f32(cameraPos, {0, 0, 0}, {0, 1, 0})
+		FOV :: 45
+		NEAR_PLANE: f32 : 0.2
+		FAR_PLANE: f32 : 160.0
+		proj := linalg.matrix4_perspective_f32(
+			FOV,
+			f32(width) / f32(height),
+			NEAR_PLANE,
+			FAR_PLANE,
 		)
-		scale: matrix[4, 4]f32 = linalg.matrix4_scale_f32({1, 1, 1})
 
-
-		transform := linalg.matrix_mul(scale, rotate)
-		sdl.PushGPUVertexUniformData(cmdBuf, 0, &transform, size_of(transform))
+		viewProj := [2]matrix[4, 4]f32{view, proj}
+		sdl.PushGPUVertexUniformData(cmdBuf, 0, &viewProj, size_of(viewProj))
 
 
 		bufferBindings := [?]sdl.GPUBufferBinding {
