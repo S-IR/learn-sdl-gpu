@@ -2,5 +2,5 @@ dxc src/hlsl/cube.hlsl -T vs_6_0 -Zi -E main -DVERTEX_SHADER -spirv -Fo  resourc
 dxc src/hlsl/cube.hlsl -T ps_6_0 -Zi -E main -DFRAGMENT_SHADER -spirv -Fo resources/shader-binaries/shader.frag.spv
 
 @REM DXIL creating
-@REM dxc src/hlsl/vert.hlsl -T vs_6_0 -Zi -E main -DVERTEX_SHADER -Qembed_debug -Fo  resources/shader-binaries/shader.vert.dxil
-@REM dxc src/hlsl/frag.hlsl -T ps_6_0 -Zi -E main -DFRAGMENT_SHADER -Qembed_debug -Fo resources/shader-binaries/shader.frag.dxil
+ dxc src/hlsl/vert.hlsl -T vs_6_0 -Zi -E main -DVERTEX_SHADER -Qembed_debug -Fo  resources/shader-binaries/shader.vert.dxil
+ dxc src/hlsl/frag.hlsl -T ps_6_0 -Zi -E main -DFRAGMENT_SHADER -Qembed_debug -Fo resources/shader-binaries/shader.frag.dxil
