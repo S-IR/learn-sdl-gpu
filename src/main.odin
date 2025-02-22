@@ -128,6 +128,12 @@ main :: proc() {
 				if e.key.key == sdl.K_ESCAPE {
 					quit = true
 				}
+			case .WINDOW_RESIZED:
+				screenWidth, screenHeight := e.window.data1, e.window.data2
+
+				sdl.SetWindowSize(window, screenWidth, screenHeight)
+				sdl.SyncWindow(window)
+
 			case:
 				continue
 			}
