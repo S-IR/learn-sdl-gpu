@@ -3,12 +3,18 @@
 
 struct VSOutput
 {
-    float3 color : TEXCOORD0;
-    float2 uv : TEXCOORD1;
+    float2 uv : TEXCOORD0;
     float4 position : SV_Position;
 };
 
-#ifdef VERTEX_SHADER
+#ifdef VERTEX
+
+struct CubeData
+{
+    float3 worldPosition ;
+    float2 atlasIndex; 
+};
+StructuredBuffer<CubeData> CubesSBO : register(t0, space0);
 
 cbuffer CameraUBO : register(b0, space1)
 {
@@ -19,14 +25,12 @@ cbuffer CameraUBO : register(b0, space1)
 
 cbuffer AtlasUBO: register(b1,space1){
     float2 atlasTileSize; 
-    float2 atlasIndex; 
 }
 
 struct VSInput
 {
     float3 position : TEXCOORD0;
-    float3 color: TEXCOORD1;
-    float2 uv : TEXCOORD2;
+    float2 uv : TEXCOORD1;
     uint instanceId : SV_InstanceID;
 
 };
@@ -35,20 +39,19 @@ struct VSInput
 VSOutput main(VSInput input)
 {
     VSOutput output;
-    output.color = input.color;
-    output.uv = input.uv * atlasTileSize + atlasIndex * atlasTileSize;
+    CubeData cube = CubesSBO[input.instanceId];
+    output.uv = input.uv * atlasTileSize + cube.atlasIndex * atlasTileSize;
 
-    float4 worldPos= float4(input.position, 1);
+    float4 worldPos= float4(input.position + cube.worldPosition, 1);
     float4 viewPos = mul(view, worldPos);
     float4 clipPos = mul(proj, viewPos);
-
     output.position = clipPos;
 
     return output;
 }
 #endif
 
-#ifdef FRAGMENT_SHADER
+#ifdef FRAGMENT
 
 Texture2D<float4> Texture : register(t0, space2);
 SamplerState Sampler : register(s0, space2);
@@ -58,12 +61,10 @@ struct FSOutput
   float depth : SV_Depth;
 };
 
-#define NearPlane 0.01
-#define FarPlane 60
 FSOutput main(VSOutput input) 
 {   
     FSOutput output;
-    output.color = float4(input.color,1.0);
+    output.color = Texture.Sample(Sampler,input.uv);
     output.depth = input.position.z;
     return output;
 }

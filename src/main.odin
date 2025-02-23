@@ -10,7 +10,6 @@ import sdl "vendor:sdl3"
 sdl_ensure :: proc(cond: bool, message: string = "") {
 	msg := fmt.tprintf("%s:%s\n", message, sdl.GetError())
 	ensure(cond, msg)
-
 }
 
 device: ^sdl.GPUDevice
@@ -29,22 +28,29 @@ AtlasIndex :: enum u8 {
 TOTAL_VERTICES :: 24
 
 AtlasUBO :: struct {
-	tileSize:   float2,
-	atlasIndex: float2,
+	tileSize: float2,
 }
 
 tileWidth: f32 : 2
 tileHeight: f32 : 2
 
+
+GRID_SIZE :: 5
+
+CubeInfo :: struct {
+	worldPosition: float3,
+	_pad0:         f32,
+	index:         float2,
+	_pad1:         float2,
+}
+
+
+cubes := [GRID_SIZE * GRID_SIZE]CubeInfo{}
+
 tileSize :: float2{1.0 / tileWidth, 1.0 / tileHeight}
 
 
 dt: f64
-
-
-CubeInfo :: struct {
-	atlasInde: float2,
-}
 
 
 main :: proc() {
@@ -77,7 +83,7 @@ main :: proc() {
 	sdl_ensure(window != nil)
 	defer sdl.DestroyWindow(window)
 
-	device = sdl.CreateGPUDevice({.SPIRV}, ODIN_DEBUG, nil)
+	device = sdl.CreateGPUDevice({.DXIL}, ODIN_DEBUG, nil)
 	sdl_ensure(device != nil)
 	defer sdl.DestroyGPUDevice(device)
 
@@ -85,16 +91,15 @@ main :: proc() {
 
 	vertexShader := load_shader(
 		filepath.join(
-			{"resources", "shader-binaries", "shader.vert.spv"},
+			{"resources", "shader-binaries", "cube.vertex.dxil"},
 			allocator = context.temp_allocator,
 		),
-		{UBOs = 2, SBOs = 0},
+		{UBOs = 2, SBOs = 1},
 	)
-
 
 	fragmentShader := load_shader(
 		filepath.join(
-			{"resources", "shader-binaries", "shader.frag.spv"},
+			{"resources", "shader-binaries", "cube.fragment.dxil"},
 			allocator = context.temp_allocator,
 		),
 		{samplers = 1, UBOs = 1},
@@ -120,9 +125,8 @@ main :: proc() {
 				compare_op = .LESS,
 				write_mask = 0xFF,
 			},
-			rasterizer_state = {cull_mode = .NONE, fill_mode = .FILL},
 			vertex_input_state = {
-				num_vertex_buffers = 3,
+				num_vertex_buffers = 2,
 				vertex_buffer_descriptions = raw_data(
 					[]sdl.GPUVertexBufferDescription {
 						{
@@ -135,22 +139,15 @@ main :: proc() {
 							slot = 1,
 							instance_step_rate = 0,
 							input_rate = .VERTEX,
-							pitch = size_of(float3),
-						},
-						{
-							slot = 2,
-							instance_step_rate = 0,
-							input_rate = .VERTEX,
 							pitch = size_of(float2),
 						},
 					},
 				),
-				num_vertex_attributes = 3,
+				num_vertex_attributes = 2,
 				vertex_attributes = raw_data(
 					[]sdl.GPUVertexAttribute {
 						{buffer_slot = 0, format = .FLOAT3, location = 0, offset = 0},
-						{buffer_slot = 1, format = .FLOAT3, location = 1, offset = 0},
-						{buffer_slot = 2, format = .FLOAT2, location = 2, offset = 0},
+						{buffer_slot = 1, format = .FLOAT2, location = 1, offset = 0},
 					},
 				),
 			},
@@ -189,8 +186,8 @@ main :: proc() {
 	)
 	sdl_ensure(positions != nil)
 	defer sdl.ReleaseGPUBuffer(device, positions)
-	gpu_buffer_upload(&positions, raw_data(&cubePositions), size_of(cubePositions))
 	sdl.SetGPUBufferName(device, positions, "positions")
+	gpu_buffer_upload(&positions, raw_data(&cubePositions), size_of(cubePositions))
 
 	colors := sdl.CreateGPUBuffer(
 		device,
@@ -222,6 +219,34 @@ main :: proc() {
 	gpu_buffer_upload(&indices, raw_data(&cubeIndices), size_of(cubeIndices))
 
 
+	cubeSBO := sdl.CreateGPUBuffer(
+		device,
+		sdl.GPUBufferCreateInfo{usage = {.GRAPHICS_STORAGE_READ}, size = size_of(cubes)},
+	)
+	defer sdl.ReleaseGPUBuffer(device, cubeSBO)
+	sdl.SetGPUBufferName(device, cubeSBO, "cubeSBO")
+
+	{
+		for x in 0 ..< GRID_SIZE {
+			for z in 0 ..< GRID_SIZE {
+				chosenIndex: AtlasIndex = .Grass
+
+				column := i32(chosenIndex) % i32(tileWidth)
+				row := i32(chosenIndex) / i32(tileWidth)
+				atlasIndex := float2{f32(column), f32(row)}
+
+
+				cubes[x * GRID_SIZE + z] = CubeInfo {
+					worldPosition = {f32(x), 0, f32(z)},
+					index         = atlasIndex,
+				}
+			}
+		}
+		gpu_buffer_upload(&cubeSBO, raw_data(&cubes), size_of(cubes))
+
+	}
+
+
 	texture := load_image(
 		filepath.join({"resources", "images", "atlas.jpg"}, allocator = context.temp_allocator),
 	)
@@ -247,7 +272,6 @@ main :: proc() {
 	e: sdl.Event
 	quit := false
 
-	chosenIndex: AtlasIndex = .Dirt
 	free_all(context.temp_allocator)
 
 
@@ -257,8 +281,6 @@ main :: proc() {
 
 	currRotationAngle: f32 = 0
 	ROTATION_SPEED :: 90
-
-	counter := 0
 
 	for !quit {
 		defer {
@@ -271,7 +293,6 @@ main :: proc() {
 				time.sleep(sleepTime)
 			}
 
-			// Calculate actual dt for next frame
 			dt = time.duration_seconds(time.since(lastFrameTime))
 			lastFrameTime = time.now()
 		}
@@ -303,6 +324,22 @@ main :: proc() {
 				screenWidth, screenHeight := e.window.data1, e.window.data2
 
 				sdl.SetWindowSize(window, screenWidth, screenHeight)
+
+				sdl.ReleaseGPUTexture(device, depthTexture)
+				depthTexture = sdl.CreateGPUTexture(
+					device,
+					sdl.GPUTextureCreateInfo {
+						type = .D2,
+						width = u32(screenWidth),
+						height = u32(screenHeight),
+						layer_count_or_depth = 1,
+						num_levels = 1,
+						sample_count = ._1,
+						format = .D24_UNORM,
+						usage = {.DEPTH_STENCIL_TARGET},
+					},
+				)
+
 				sdl.SyncWindow(window)
 
 			case:
@@ -335,31 +372,22 @@ main :: proc() {
 
 
 		renderPass := sdl.BeginGPURenderPass(cmdBuf, &colorTargetInfo, 1, &depthStencilTargetInfo)
-
-		column := i32(chosenIndex) % i32(tileWidth)
-		row := i32(chosenIndex) / i32(tileWidth)
-		atlasIndex := float2{f32(column), f32(row)}
 		sdl.BindGPUGraphicsPipeline(renderPass, pipeline)
 
 		assert(positions != nil)
 		assert(uvs != nil)
+		assert(cubeSBO != nil)
+
+		sdl.BindGPUVertexStorageBuffers(renderPass, 0, &cubeSBO, 1)
+
 		currRotationAngle += f32(dt) * ROTATION_SPEED
-		// rotate: matrix[4, 4]f32 = linalg.matrix4_from_euler_angles_f32(
-		// 	math.RAD_PER_DEG * currRotationAngle,
-		// 	0.0,
-		// 	math.RAD_PER_DEG * currRotationAngle,
-		// 	.XYZ,
-		// )
-		// scale: matrix[4, 4]f32 = linalg.matrix4_scale_f32({1, 1, 1})
 
-
-		// transform := linalg.matrix_mul(scale, rotate)
-		radius: f32 : 3 // Distance from center
+		radius: f32 : 3
 
 		cameraX := radius * math.cos(currRotationAngle * math.RAD_PER_DEG)
 		cameraZ := radius * math.sin(currRotationAngle * math.RAD_PER_DEG)
 
-		cameraPos := float3{cameraX, 3, cameraZ} // Keep Y height constant
+		cameraPos := float3{cameraX, 3, cameraZ}
 
 		view := linalg.matrix4_look_at_f32(cameraPos, {0, 0, 0}, {0, 1, 0})
 		FOV :: 45
@@ -378,11 +406,10 @@ main :: proc() {
 
 		bufferBindings := [?]sdl.GPUBufferBinding {
 			{buffer = positions, offset = 0},
-			{buffer = colors, offset = 0},
 			{buffer = uvs, offset = 0},
 		}
 
-		atlasUbo: AtlasUBO = {tileSize, atlasIndex}
+		atlasUbo: AtlasUBO = {tileSize}
 
 		sdl.PushGPUVertexUniformData(cmdBuf, 1, &atlasUbo, size_of(atlasUbo))
 
@@ -398,7 +425,7 @@ main :: proc() {
 			raw_data([]sdl.GPUTextureSamplerBinding{{texture = texture, sampler = sampler}}),
 			1,
 		)
-		sdl.DrawGPUIndexedPrimitives(renderPass, len(cubeIndices), 1, 0, 0, 0)
+		sdl.DrawGPUIndexedPrimitives(renderPass, len(cubeIndices), GRID_SIZE * GRID_SIZE, 0, 0, 0)
 		sdl.EndGPURenderPass(renderPass)
 
 	}
