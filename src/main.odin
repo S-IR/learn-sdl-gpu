@@ -83,7 +83,7 @@ main :: proc() {
 	sdl_ensure(window != nil)
 	defer sdl.DestroyWindow(window)
 
-	device = sdl.CreateGPUDevice({.DXIL}, ODIN_DEBUG, nil)
+	device = sdl.CreateGPUDevice({.SPIRV}, ODIN_DEBUG, nil)
 	sdl_ensure(device != nil)
 	defer sdl.DestroyGPUDevice(device)
 
@@ -91,7 +91,7 @@ main :: proc() {
 
 	vertexShader := load_shader(
 		filepath.join(
-			{"resources", "shader-binaries", "cube.vertex.dxil"},
+			{"resources", "shader-binaries", "cube.vertex.spv"},
 			allocator = context.temp_allocator,
 		),
 		{UBOs = 2, SBOs = 1},
@@ -99,7 +99,7 @@ main :: proc() {
 
 	fragmentShader := load_shader(
 		filepath.join(
-			{"resources", "shader-binaries", "cube.fragment.dxil"},
+			{"resources", "shader-binaries", "cube.fragment.spv"},
 			allocator = context.temp_allocator,
 		),
 		{samplers = 1, UBOs = 1},
