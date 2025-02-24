@@ -6,10 +6,8 @@ import "core:mem"
 import "core:path/filepath"
 import "core:time"
 import sdl "vendor:sdl3"
-
 sdl_ensure :: proc(cond: bool, message: string = "") {
-	msg := fmt.tprintf("%s:%s\n", message, sdl.GetError())
-	ensure(cond, msg)
+	ensure(cond, fmt.tprintf("%s:%s\n", message, sdl.GetError()))
 }
 
 device: ^sdl.GPUDevice
@@ -55,6 +53,8 @@ dt: f64
 
 main :: proc() {
 	when ODIN_DEBUG {
+
+
 		track: mem.Tracking_Allocator
 		mem.tracking_allocator_init(&track, context.allocator)
 		context.allocator = mem.tracking_allocator(&track)
@@ -74,6 +74,7 @@ main :: proc() {
 			}
 			mem.tracking_allocator_destroy(&track)
 		}
+
 	}
 
 	width: i32 = 1280
@@ -283,6 +284,8 @@ main :: proc() {
 	ROTATION_SPEED :: 90
 
 	for !quit {
+
+		defer free_all(context.temp_allocator)
 		defer {
 			frameEnd := time.now()
 			frameDuration := time.diff(frameEnd, lastFrameTime)
