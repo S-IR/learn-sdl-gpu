@@ -1,7 +1,5 @@
 package main
 import "core:fmt"
-import "core:math"
-import "core:math/linalg"
 import "core:mem"
 import "core:path/filepath"
 import "core:time"
@@ -10,8 +8,6 @@ sdl_ensure :: proc(cond: bool, message: string = "") {
 	ensure(cond, fmt.tprintf("%s:%s\n", message, sdl.GetError()))
 }
 
-device: ^sdl.GPUDevice
-window: ^sdl.Window
 
 float2 :: [2]f32
 float3 :: [3]f32
@@ -33,8 +29,7 @@ tileWidth: f32 : 2
 tileHeight: f32 : 2
 
 
-GRID_SIZE :: 5
-
+GRID_SIZE :: 25
 CubeInfo :: struct {
 	worldPosition: float3,
 	_pad0:         f32,
@@ -46,9 +41,6 @@ CubeInfo :: struct {
 cubes := [GRID_SIZE * GRID_SIZE]CubeInfo{}
 
 tileSize :: float2{1.0 / tileWidth, 1.0 / tileHeight}
-
-
-dt: f64
 
 
 main :: proc() {
@@ -76,11 +68,8 @@ main :: proc() {
 		}
 
 	}
-
-	width: i32 = 1280
-	height: i32 = 720
 	sdl_ensure(sdl.Init({.VIDEO}))
-	window = sdl.CreateWindow("Learn SDL Gpu", i32(width), i32(height), {.RESIZABLE})
+	window = sdl.CreateWindow("Learn SDL Gpu", i32(screenWidth), i32(screenHeight), {.RESIZABLE})
 	sdl_ensure(window != nil)
 	defer sdl.DestroyWindow(window)
 
@@ -165,13 +154,13 @@ main :: proc() {
 	sdl.ReleaseGPUShader(device, fragmentShader)
 
 
-	sdl.GetWindowSizeInPixels(window, &width, &height)
+	sdl.GetWindowSizeInPixels(window, &screenWidth, &screenHeight)
 	depthTexture := sdl.CreateGPUTexture(
 		device,
 		sdl.GPUTextureCreateInfo {
 			type = .D2,
-			width = u32(width),
-			height = u32(height),
+			width = u32(screenWidth),
+			height = u32(screenHeight),
 			layer_count_or_depth = 1,
 			num_levels = 1,
 			sample_count = ._1,
@@ -238,7 +227,7 @@ main :: proc() {
 
 
 				cubes[x * GRID_SIZE + z] = CubeInfo {
-					worldPosition = {f32(x), 0, f32(z)},
+					worldPosition = {f32(x), -1, f32(z)},
 					index         = atlasIndex,
 				}
 			}
@@ -283,6 +272,10 @@ main :: proc() {
 	currRotationAngle: f32 = 0
 	ROTATION_SPEED :: 90
 
+	prevScreenWidth := screenWidth
+	prevScreenHeight := screenHeight
+
+	camera := Camera_new()
 	for !quit {
 
 		defer free_all(context.temp_allocator)
@@ -312,43 +305,38 @@ main :: proc() {
 					quit = true
 				}
 
-			// switch e.key.key {
-			// case sdl.K_A:
-			// 	chosenIndex = .Dirt
-			// case sdl.K_W:
-			// 	chosenIndex = .Stone
-			// case sdl.K_S:
-			// 	chosenIndex = .Grass
-			// case sdl.K_D:
-			// 	chosenIndex = .DieHard
-
-			// }
 			case .WINDOW_RESIZED:
-				screenWidth, screenHeight := e.window.data1, e.window.data2
-
-				sdl.SetWindowSize(window, screenWidth, screenHeight)
-
-				sdl.ReleaseGPUTexture(device, depthTexture)
-				depthTexture = sdl.CreateGPUTexture(
-					device,
-					sdl.GPUTextureCreateInfo {
-						type = .D2,
-						width = u32(screenWidth),
-						height = u32(screenHeight),
-						layer_count_or_depth = 1,
-						num_levels = 1,
-						sample_count = ._1,
-						format = .D24_UNORM,
-						usage = {.DEPTH_STENCIL_TARGET},
-					},
-				)
-
-				sdl.SyncWindow(window)
-
+				screenWidth, screenHeight = e.window.data1, e.window.data2
+			case .MOUSE_MOTION:
+				Camera_process_mouse_movement(&camera, e.motion.xrel, e.motion.yrel)
 			case:
 				continue
 			}
 		}
+		if prevScreenWidth != screenWidth || prevScreenHeight != screenHeight {
+			sdl.SetWindowSize(window, screenWidth, screenHeight)
+
+			sdl.ReleaseGPUTexture(device, depthTexture)
+			depthTexture = sdl.CreateGPUTexture(
+				device,
+				sdl.GPUTextureCreateInfo {
+					type = .D2,
+					width = u32(screenWidth),
+					height = u32(screenHeight),
+					layer_count_or_depth = 1,
+					num_levels = 1,
+					sample_count = ._1,
+					format = .D24_UNORM,
+					usage = {.DEPTH_STENCIL_TARGET},
+				},
+			)
+
+			sdl.SyncWindow(window)
+			prevScreenWidth = screenWidth
+			prevScreenHeight = screenHeight
+		}
+
+		Camera_process_keyboard_movement(&camera)
 
 		cmdBuf := sdl.AcquireGPUCommandBuffer(device)
 		if cmdBuf == nil do continue
@@ -385,23 +373,8 @@ main :: proc() {
 
 		currRotationAngle += f32(dt) * ROTATION_SPEED
 
-		radius: f32 : 3
 
-		cameraX := radius * math.cos(currRotationAngle * math.RAD_PER_DEG)
-		cameraZ := radius * math.sin(currRotationAngle * math.RAD_PER_DEG)
-
-		cameraPos := float3{cameraX, 3, cameraZ}
-
-		view := linalg.matrix4_look_at_f32(cameraPos, {0, 0, 0}, {0, 1, 0})
-		FOV :: 45
-		NEAR_PLANE: f32 : 0.2
-		FAR_PLANE: f32 : 160.0
-		proj := linalg.matrix4_perspective_f32(
-			FOV,
-			f32(width) / f32(height),
-			NEAR_PLANE,
-			FAR_PLANE,
-		)
+		view, proj := Camera_view_proj(&camera)
 
 		viewProj := [2]matrix[4, 4]f32{view, proj}
 		sdl.PushGPUVertexUniformData(cmdBuf, 0, &viewProj, size_of(viewProj))
