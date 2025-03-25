@@ -1,6 +1,7 @@
-learn-sdl-gpu.exe
-learn-sdl-gpu.pdb
-src.exe
 build/
-resources/shader-binaries/
-build.exe
+
+*.dll
+*.exe
+*.pdb
+*.dxil
+*.spv

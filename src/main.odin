@@ -227,7 +227,7 @@ main :: proc() {
 
 
 				cubes[x * GRID_SIZE + z] = CubeInfo {
-					worldPosition = {f32(x), -1, f32(z)},
+					worldPosition = {f32(x) - GRID_SIZE / 2, -1, f32(z) - GRID_SIZE / 2},
 					index         = atlasIndex,
 				}
 			}
