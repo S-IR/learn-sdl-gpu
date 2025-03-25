@@ -11,7 +11,7 @@ struct VSOutput
 
 struct CubeData
 {
-    float3 worldPosition ;
+    float3 worldPosition;
     float2 atlasIndex; 
 };
 StructuredBuffer<CubeData> CubesSBO : register(t0, space0);
@@ -38,8 +38,12 @@ struct VSInput
 
 VSOutput main(VSInput input)
 {
+    
+
     VSOutput output;
     CubeData cube = CubesSBO[input.instanceId];
+
+ 
     output.uv = input.uv * atlasTileSize + cube.atlasIndex * atlasTileSize;
 
     float4 worldPos= float4(input.position + cube.worldPosition, 1);
@@ -64,6 +68,9 @@ struct FSOutput
 FSOutput main(VSOutput input) 
 {   
     FSOutput output;
+     if (input.uv.x < 0.0 || input.uv.y < 0.0 ) {
+        discard;
+    }
     output.color = Texture.Sample(Sampler,input.uv);
     output.depth = input.position.z;
     return output;

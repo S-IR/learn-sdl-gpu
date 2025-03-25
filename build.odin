@@ -53,17 +53,17 @@ compile_shader :: proc(path, dir, ext: string, stage: enum {
 		fragment,
 	}) {
 	name := strings.trim_suffix(filepath.base(path), ".hlsl")
-	stage := stage == .vertex ? "vertex" : "fragment"
-	define := strings.to_upper(stage)
+	stageStr := stage == .vertex ? "vertex" : "fragment"
+	define := strings.to_upper(stageStr)
 
 	exec(
 		{
 			"shadercross",
 			"-g",
 			"--stage",
-			string(stage),
+			string(stageStr),
 			"--output",
-			filepath.join({dir, strings.join({name, stage, ext}, ".")}),
+			filepath.join({dir, strings.join({name, stageStr, ext}, ".")}),
 			fmt.tprintf("-D%s", define),
 			path,
 		},
@@ -83,6 +83,7 @@ exec :: proc(command: []string) {
 
 	if state.exit_code != 0 {
 		msg := fmt.tprintf("%s%s", string(stdOut), string(stdErr))
-		panic(msg)
+		fmt.println(msg)
+		os.exit(state.exit_code)
 	}
 }
