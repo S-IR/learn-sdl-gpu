@@ -22,8 +22,10 @@ CubeAtlasUBO :: struct {
 	tileSize: float2,
 }
 
+GRID_X_LEN :: 25
+GRID_Y_LEN :: 25
+GRID_Z_LEN :: 25
 
-GRID_SIZE :: 5
 CubeInfo :: struct {
 	worldPosition: float3,
 	_pad0:         f32,
@@ -32,7 +34,7 @@ CubeInfo :: struct {
 }
 
 
-cubes := [GRID_SIZE * GRID_SIZE]CubeInfo{}
+cubes := [GRID_X_LEN * GRID_Y_LEN * GRID_Z_LEN]CubeInfo{}
 tileSize :: float2{1.0 / tileWidth, 1.0 / tileHeight}
 
 
@@ -200,6 +202,12 @@ R_cube: struct {
 	sampler:            ^sdl.GPUSampler,
 } = {}
 
+cubeVertexBufferDescriptions := [?]sdl.GPUVertexBufferDescription {
+	{slot = 0, instance_step_rate = 0, input_rate = .VERTEX, pitch = size_of(float3)},
+	{slot = 1, instance_step_rate = 0, input_rate = .VERTEX, pitch = size_of(float2)},
+}
+
+
 cube_init :: proc() {
 	R_cube.vertexShaderInfo = {
 		UBOs = 2,
@@ -226,11 +234,7 @@ cube_init :: proc() {
 		R_cube.fragmentShaderInfo,
 	)
 
-	vertexBufferDescriptions := [?]sdl.GPUVertexBufferDescription {
-		{slot = 0, instance_step_rate = 0, input_rate = .VERTEX, pitch = size_of(float3)},
-		{slot = 1, instance_step_rate = 0, input_rate = .VERTEX, pitch = size_of(float2)},
-	}
-	vertexAttributes := [?]sdl.GPUVertexAttribute {
+	cubeVertexAttributes := [?]sdl.GPUVertexAttribute {
 		{buffer_slot = 0, format = .FLOAT3, location = 0, offset = 0},
 		{buffer_slot = 1, format = .FLOAT2, location = 1, offset = 0},
 	}
@@ -255,10 +259,10 @@ cube_init :: proc() {
 				write_mask = 0xFF,
 			},
 			vertex_input_state = {
-				num_vertex_buffers = len(vertexBufferDescriptions),
-				vertex_buffer_descriptions = raw_data(vertexBufferDescriptions[:]),
-				num_vertex_attributes = len(vertexAttributes),
-				vertex_attributes = raw_data(vertexAttributes[:]),
+				num_vertex_buffers = len(cubeVertexBufferDescriptions),
+				vertex_buffer_descriptions = raw_data(cubeVertexBufferDescriptions[:]),
+				num_vertex_attributes = len(cubeVertexAttributes),
+				vertex_attributes = raw_data(cubeVertexAttributes[:]),
 			},
 			primitive_type = .TRIANGLELIST,
 			vertex_shader = vertexShader,
@@ -315,10 +319,15 @@ cube_init :: proc() {
 	)
 	sdl.SetGPUBufferName(device, R_cube.SBO, "cubeSBO")
 
-	{
-		for x in 0 ..< GRID_SIZE {
-			for z in 0 ..< GRID_SIZE {
-				chosenIndex: CubeAtlasIndex = rand.choice_enum(CubeAtlasIndex)
+	for x in 0 ..< GRID_X_LEN {
+		for y in 0 ..< GRID_Y_LEN {
+			for z in 0 ..< GRID_Z_LEN {
+				worldPosition := float3 {
+					f32(x) - GRID_X_LEN / 2,
+					f32(y) - GRID_Y_LEN / 2,
+					f32(z) - GRID_Z_LEN / 2,
+				}
+				chosenIndex: CubeAtlasIndex = .Stone if worldPosition.y < 0 else .Air
 				atlasIndex: float2 = ---
 
 				if chosenIndex != .Air {
@@ -330,15 +339,14 @@ cube_init :: proc() {
 				}
 
 
-				cubes[x * GRID_SIZE + z] = CubeInfo {
-					worldPosition = {f32(x) - GRID_SIZE / 2, -1, f32(z) - GRID_SIZE / 2},
+				cubes[x * GRID_Y_LEN * GRID_Z_LEN + y * GRID_Z_LEN + z] = CubeInfo {
+					worldPosition = worldPosition,
 					index         = atlasIndex,
 				}
 			}
 		}
-		gpu_buffer_upload(&R_cube.SBO, raw_data(&cubes), size_of(cubes))
-
 	}
+	gpu_buffer_upload(&R_cube.SBO, raw_data(&cubes), size_of(cubes))
 
 
 	R_cube.texture = load_image(
@@ -387,6 +395,7 @@ cube_draw :: proc(cmdBuf: ^^sdl.GPUCommandBuffer, renderPass: ^^sdl.GPURenderPas
 		{buffer = R_cube.positions, offset = 0},
 		{buffer = R_cube.uvs, offset = 0},
 	}
+	#assert(len(cubeVertexBufferDescriptions) == len(bufferBindings))
 
 	atlasUbo: CubeAtlasUBO = {tileSize}
 
@@ -413,7 +422,14 @@ cube_draw :: proc(cmdBuf: ^^sdl.GPUCommandBuffer, renderPass: ^^sdl.GPURenderPas
 	assert(shader_infos_are_equal(currVertexInfo, R_cube.vertexShaderInfo))
 	assert(shader_infos_are_equal(currFragmentInfo, R_cube.fragmentShaderInfo))
 
-	sdl.DrawGPUIndexedPrimitives(renderPass^, len(cubeIndices), GRID_SIZE * GRID_SIZE, 0, 0, 0)
+	sdl.DrawGPUIndexedPrimitives(
+		renderPass^,
+		len(cubeIndices),
+		GRID_X_LEN * GRID_X_LEN * GRID_Z_LEN,
+		0,
+		0,
+		0,
+	)
 }
 cube_deinit :: proc() {
 	sdl.ReleaseGPUBuffer(device, R_cube.positions)

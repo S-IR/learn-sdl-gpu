@@ -1,6 +1,6 @@
 package main
 import "core:math"
-import "core:math/linalg"
+import la "core:math/linalg"
 import sdl "vendor:sdl3"
 CAMERA_MOVEMENT :: enum {
 	FORWARD,
@@ -12,7 +12,7 @@ CAMERA_MOVEMENT :: enum {
 DEFAULT_YAW :: -90.0
 DEFAULT_PITCH :: 0
 
-DEFAULT_SPEED :: 2.5
+DEFAULT_MOVEMENT_SPEED :: 7.5
 DEFAULT_FOV :: 45.0
 DEFAULT_SENSITIVITY: f32 = 0.2
 
@@ -39,12 +39,13 @@ Camera_new :: proc(
 ) -> Camera {
 	c := Camera {
 		front             = front,
-		movement_speed    = DEFAULT_SPEED,
+		movement_speed    = DEFAULT_MOVEMENT_SPEED,
 		mouse_sensitivity = DEFAULT_SENSITIVITY,
 		pos               = pos,
 		yaw               = DEFAULT_YAW,
 		pitch             = DEFAULT_PITCH,
 		fov               = fov,
+		up                = up,
 	}
 	Camera_rotate(&c)
 	return c
@@ -54,8 +55,8 @@ Camera_process_keyboard_movement :: proc(c: ^Camera) {
 	keys := sdl.GetKeyboardState(nil)
 
 	movementVector: float3 = {}
-	normalizedFront := linalg.normalize(float3{c.front.x, 0, c.front.z})
-	normalizedRight := linalg.normalize(float3{c.right.x, 0, c.right.z})
+	normalizedFront := la.normalize(float3{c.front.x, 0, c.front.z})
+	normalizedRight := la.normalize(float3{c.right.x, 0, c.right.z})
 
 	if keys[sdl.Scancode.W] != false {
 		movementVector += normalizedFront
@@ -70,11 +71,19 @@ Camera_process_keyboard_movement :: proc(c: ^Camera) {
 		movementVector += normalizedRight
 	}
 
+	if keys[sdl.Scancode.SPACE] != false {
+		movementVector += c.up
+	}
 
-	if linalg.length(movementVector) <= 0 do return
+	if keys[sdl.Scancode.X] != false {
+		movementVector -= c.up
+	}
 
-	delta := linalg.normalize(movementVector) * c.movement_speed * f32(dt)
-	c.pos += float3{delta.x, 0, delta.z}
+
+	if la.length(movementVector) <= 0 do return
+
+	delta := la.normalize(movementVector) * c.movement_speed * f32(dt)
+	c.pos += float3{delta.x, delta.y, delta.z}
 
 }
 
@@ -90,9 +99,9 @@ Camera_process_mouse_movement :: proc(c: ^Camera, received_xOffset, received_yOf
 }
 
 Camera_view_proj :: proc(c: ^Camera) -> (view, proj: matrix[4, 4]f32) {
-	view = linalg.matrix4_look_at_f32(c.pos, c.pos + c.front, c.up)
+	view = la.matrix4_look_at_f32(c.pos, c.pos + c.front, c.up)
 
-	proj = linalg.matrix4_perspective_f32(
+	proj = la.matrix4_perspective_f32(
 		c.fov,
 		f32(screenWidth) / f32(screenHeight),
 		f32(nearPlane),
@@ -115,10 +124,10 @@ Camera_rotate :: proc(c: ^Camera) {
 
 	assert(!(math.is_nan(c.front.x) || math.is_nan(c.pitch)), "Invalid camera rotation")
 
-	c.front.x = math.cos(c.yaw * linalg.RAD_PER_DEG) * math.cos(c.pitch * linalg.RAD_PER_DEG)
-	c.front.y = math.sin(c.pitch * linalg.RAD_PER_DEG)
-	c.front.z = math.sin(c.yaw * linalg.RAD_PER_DEG) * math.cos(c.pitch * linalg.RAD_PER_DEG)
-	c.front = linalg.normalize(c.front)
-	c.right = linalg.normalize(linalg.cross(c.front, WORLD_UP))
-	c.up = linalg.normalize(linalg.cross(c.right, c.front))
+	c.front.x = math.cos(c.yaw * la.RAD_PER_DEG) * math.cos(c.pitch * la.RAD_PER_DEG)
+	c.front.y = math.sin(c.pitch * la.RAD_PER_DEG)
+	c.front.z = math.sin(c.yaw * la.RAD_PER_DEG) * math.cos(c.pitch * la.RAD_PER_DEG)
+	c.front = la.normalize(c.front)
+	c.right = la.normalize(la.cross(c.front, WORLD_UP))
+	c.up = la.normalize(la.cross(c.right, c.front))
 }
