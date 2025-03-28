@@ -1,8 +1,11 @@
 package main
+import "base:runtime"
 import "core:fmt"
 import "core:math/rand"
 import "core:mem"
 import "core:path/filepath"
+import "core:prof/spall"
+import "core:sync"
 import "core:time"
 import sdl "vendor:sdl3"
 sdl_ensure :: proc(cond: bool, message: string = "") {
@@ -13,8 +16,31 @@ sdl_ensure :: proc(cond: bool, message: string = "") {
 float2 :: [2]f32
 float3 :: [3]f32
 float4 :: [4]f32
+ENABLE_SPALL :: false
+
+when ODIN_DEBUG && ENABLE_SPALL {
+	spall_ctx: spall.Context
+	@(thread_local)
+	spall_buffer: spall.Buffer
 
 
+	@(instrumentation_enter)
+	spall_enter :: proc "contextless" (
+		proc_address, call_site_return_address: rawptr,
+		loc: runtime.Source_Code_Location,
+	) {
+		spall._buffer_begin(&spall_ctx, &spall_buffer, "", "", loc)
+	}
+
+	@(instrumentation_exit)
+	spall_exit :: proc "contextless" (
+		proc_address, call_site_return_address: rawptr,
+		loc: runtime.Source_Code_Location,
+	) {
+		spall._buffer_end(&spall_ctx, &spall_buffer)
+	}
+
+}
 main :: proc() {
 	when ODIN_DEBUG {
 
@@ -37,6 +63,19 @@ main :: proc() {
 				}
 			}
 			mem.tracking_allocator_destroy(&track)
+		}
+
+		when ENABLE_SPALL {
+			spall_ctx = spall.context_create("trace_test.spall")
+			defer spall.context_destroy(&spall_ctx)
+
+			buffer_backing := make([]u8, spall.BUFFER_DEFAULT_SIZE)
+			defer delete(buffer_backing)
+
+			spall_buffer = spall.buffer_create(buffer_backing, u32(sync.current_thread_id()))
+			defer spall.buffer_destroy(&spall_ctx, &spall_buffer)
+
+
 		}
 
 	}
@@ -72,7 +111,6 @@ main :: proc() {
 
 	e: sdl.Event
 	quit := false
-
 
 	lastFrameTime := time.now()
 	FPS :: 144

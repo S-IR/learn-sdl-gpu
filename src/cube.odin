@@ -1,6 +1,6 @@
 package main
-
 import "core:fmt"
+import "core:math"
 import "core:math/rand"
 import "core:mem"
 import "core:path/filepath"
@@ -8,9 +8,10 @@ import "core:time"
 import sdl "vendor:sdl3"
 TOTAL_CUBE_VERTICES :: 24
 
-tileWidth: f32 : 2
-tileHeight: f32 : 2
-CubeAtlasIndex :: enum u8 {
+tileRows: f32 : 2
+tileCols: f32 : 2
+ATLAS_NUM_OF_TILES :: float2{tileRows, tileCols}
+CubeAtlasIndex :: enum u32 {
 	Dirt,
 	Stone,
 	Grass,
@@ -19,98 +20,107 @@ CubeAtlasIndex :: enum u8 {
 }
 
 CubeAtlasUBO :: struct {
+	tiles:    float2,
 	tileSize: float2,
 }
 
-GRID_X_LEN :: 25
-GRID_Y_LEN :: 25
-GRID_Z_LEN :: 25
+GRID_X_LEN :: 20
+GRID_Y_LEN :: 20
+GRID_Z_LEN :: 20
 
 CubeInfo :: struct {
 	worldPosition: float3,
-	_pad0:         f32,
-	index:         float2,
-	_pad1:         float2,
+	atlasIndex:    u32,
 }
 
 
 cubes := [GRID_X_LEN * GRID_Y_LEN * GRID_Z_LEN]CubeInfo{}
-tileSize :: float2{1.0 / tileWidth, 1.0 / tileHeight}
+ATLAS_TILE_SIZE :: float2{1.0 / tileRows, 1.0 / tileCols}
 
 
 cubePositions := [24]float3 {
 	// front face
-	{-0.5, -0.5, 0.5}, // Front bottom left  (0)
-	{0.5, -0.5, 0.5}, // Front bottom right (1)
-	{0.5, 0.5, 0.5}, // Front top right    (2)
-	{-0.5, 0.5, 0.5}, // Front top left     (3)
+	{-0.5, -0.5, 0.5}, //  left bottom front  
+	{-0.5, 0.5, 0.5}, //   left top front 
+	{0.5, 0.5, 0.5}, //  right top front  
+	{0.5, -0.5, 0.5}, //  right bottom front
 
 	// back face
-	{-0.5, -0.5, -0.5}, // Back bottom left   (4)
-	{-0.5, 0.5, -0.5}, // Back top left      (5)
-	{0.5, 0.5, -0.5}, // Back top right     (6)
-	{0.5, -0.5, -0.5}, // Back bottom right  (7)
+	{-0.5, -0.5, -0.5}, // Back bottom left 
+	{-0.5, 0.5, -0.5}, // Back top left     
+	{0.5, 0.5, -0.5}, // Back top right     
+	{0.5, -0.5, -0.5}, // Back bottom right 
 
 	// right face
-	{0.5, -0.5, -0.5}, // Right bottom back  (8)
-	{0.5, 0.5, -0.5}, // Right top back     (9)
-	{0.5, 0.5, 0.5}, // Right top front    (10)
-	{0.5, -0.5, 0.5}, // Right bottom front (11)
+	{0.5, -0.5, -0.5}, // Right bottom back
+	{0.5, 0.5, -0.5}, // Right top back    
+	{0.5, 0.5, 0.5}, // Right top front    
+	{0.5, -0.5, 0.5}, // Right bottom front
 
 	// left face
-	{-0.5, -0.5, 0.5}, // Left bottom front  (12)
-	{-0.5, 0.5, 0.5}, // Left top front     (13)
-	{-0.5, 0.5, -0.5}, // Left top back      (14)
-	{-0.5, -0.5, -0.5}, // Left bottom back   (15)
+	{-0.5, -0.5, -0.5}, // Left bottom back
+	{-0.5, 0.5, -0.5}, // Left top back    
+	{-0.5, 0.5, 0.5}, // Left top front    
+	{-0.5, -0.5, 0.5}, // Left bottom front
 
 	// top face
-	{-0.5, 0.5, -0.5}, // Top back left      (16)
-	{0.5, 0.5, -0.5}, // Top back right     (17)
-	{0.5, 0.5, 0.5}, // Top front right    (18)
-	{-0.5, 0.5, 0.5}, // Top front left     (19)
-	{-0.5, -0.5, 0.5}, // Bottom front left  (20)
-	{-0.5, -0.5, -0.5}, // Bottom back left   (21)
-	{0.5, -0.5, -0.5}, // Bottom back right  (22)
-	{0.5, -0.5, 0.5}, // Bottom front right (23)
-}
-
-cubeColors := [TOTAL_CUBE_VERTICES]float3 {
-	// front face
-	{0, 0, 0}, // Front bottom left  (0)
-	{0, 0, 0}, // Front bottom right (1)
-	{0, 0, 0}, // Front top right    (2)
-	{0, 0, 0}, // Front top left     (3)
-
-	// back face
-	{1, 0, 0}, // Back bottom left   (4)
-	{1, 0, 0}, // Back top left      (5)
-	{1, 0, 0}, // Back top right     (6)
-	{1, 0, 0}, // Back bottom right  (7)
-
-	// right face
-	{1, 1, 0}, // Right bottom back  (8)
-	{1, 1, 0}, // Right top back     (9)
-	{1, 1, 0}, // Right top front    (10)
-	{1, 1, 0}, // Right bottom front (11)
-
-	// left face
-	{1, 0, 1}, // Left bottom front  (12)
-	{1, 0, 1}, // Left top front     (13)
-	{1, 0, 1}, // Left top back      (14)
-	{1, 0, 1}, // Left bottom back   (15)
-
-	// top face
-	{1, .5, .5}, // Top back left      (16)
-	{1, .5, .5}, // Top back right     (17)
-	{1, .5, .5}, // Top front right    (18)
-	{1, .5, .5}, // Top front left     (19)
+	{-0.5, 0.5, -0.5}, // Top back left    
+	{0.5, 0.5, -0.5}, // Top back right    
+	{0.5, 0.5, 0.5}, // Top front right    
+	{-0.5, 0.5, 0.5}, // Top front left    
 
 	//bottom face
-	{1, .8, .8}, // Bottom front left  (20)
-	{1, .8, .8}, // Bottom back left   (21)
-	{1, .8, .8}, // Bottom back right  (22)
-	{1, .8, .8}, // Bottom front right (23)
+	{-0.5, -0.5, 0.5}, // Bottom front left
+	{-0.5, -0.5, -0.5}, // Bottom back left
+	{0.5, -0.5, -0.5}, // Bottom back right
+	{0.5, -0.5, 0.5}, // Bottom front right
 }
+
+cubeIndices := [36]u16 {
+	// Back face 
+	0,
+	2,
+	1,
+	0,
+	3,
+	2,
+	// Front face 
+	0 + 4,
+	1 + 4,
+	2 + 4,
+	0 + 4,
+	2 + 4,
+	3 + 4,
+	// Right facet
+	0 + 8,
+	1 + 8,
+	2 + 8,
+	0 + 8,
+	2 + 8,
+	3 + 8,
+	// Left face 
+	0 + 12,
+	2 + 12,
+	1 + 12,
+	0 + 12,
+	3 + 12,
+	2 + 12,
+	// Top face
+	0 + 16,
+	2 + 16,
+	1 + 16,
+	0 + 16,
+	3 + 16,
+	2 + 16,
+	// Bottom face 
+	0 + 20,
+	1 + 20,
+	2 + 20,
+	0 + 20,
+	2 + 20,
+	3 + 20,
+}
+
 cubeUV := [TOTAL_CUBE_VERTICES]float2 {
 	//front
 	{0, 0},
@@ -144,57 +154,12 @@ cubeUV := [TOTAL_CUBE_VERTICES]float2 {
 	{0, 1},
 }
 
-cubeIndices := [36]u16 {
-	// Front face 
-	0,
-	1,
-	2,
-	0,
-	2,
-	3,
-	// Back face 
-	4,
-	5,
-	6,
-	4,
-	6,
-	7,
-	// Right facet
-	8,
-	9,
-	10,
-	8,
-	10,
-	11,
-	// Left face 
-	12,
-	13,
-	14,
-	12,
-	14,
-	15,
-	// Top face
-	16,
-	17,
-	18,
-	16,
-	18,
-	19,
-	// Bottom face 
-	20,
-	21,
-	22,
-	20,
-	22,
-	23,
-}
 
 R_cube: struct {
 	vertexShaderInfo:   ShaderInfo,
 	fragmentShaderInfo: ShaderInfo,
 	pipeline:           ^sdl.GPUGraphicsPipeline,
 	positions:          ^sdl.GPUBuffer,
-	colors:             ^sdl.GPUBuffer,
 	uvs:                ^sdl.GPUBuffer,
 	indices:            ^sdl.GPUBuffer,
 	SBO:                ^sdl.GPUBuffer,
@@ -258,6 +223,11 @@ cube_init :: proc() {
 				compare_op = .LESS,
 				write_mask = 0xFF,
 			},
+			rasterizer_state = {
+				cull_mode = .BACK,
+				fill_mode = .FILL,
+				front_face = .COUNTER_CLOCKWISE,
+			},
 			vertex_input_state = {
 				num_vertex_buffers = len(cubeVertexBufferDescriptions),
 				vertex_buffer_descriptions = raw_data(cubeVertexBufferDescriptions[:]),
@@ -285,14 +255,6 @@ cube_init :: proc() {
 	sdl_ensure(R_cube.positions != nil)
 	sdl.SetGPUBufferName(device, R_cube.positions, "positions")
 	gpu_buffer_upload(&R_cube.positions, raw_data(&cubePositions), size_of(cubePositions))
-
-	R_cube.colors = sdl.CreateGPUBuffer(
-		device,
-		sdl.GPUBufferCreateInfo{usage = {.VERTEX}, size = u32(size_of(cubeColors))},
-	)
-	sdl_ensure(R_cube.colors != nil)
-	sdl.SetGPUBufferName(device, R_cube.colors, "colors")
-	gpu_buffer_upload(&R_cube.colors, raw_data(&cubeColors), size_of(cubeColors))
 
 
 	R_cube.uvs = sdl.CreateGPUBuffer(
@@ -322,17 +284,23 @@ cube_init :: proc() {
 	for x in 0 ..< GRID_X_LEN {
 		for y in 0 ..< GRID_Y_LEN {
 			for z in 0 ..< GRID_Z_LEN {
+
 				worldPosition := float3 {
 					f32(x) - GRID_X_LEN / 2,
 					f32(y) - GRID_Y_LEN / 2,
 					f32(z) - GRID_Z_LEN / 2,
 				}
-				chosenIndex: CubeAtlasIndex = .Stone if worldPosition.y < 0 else .Air
+
+				frequency: f32 : 10
+				amplitude: f32 : 10
+				surfaceY: f32 = math.sin(f32(x) * frequency) * amplitude
+				chosenIndex: CubeAtlasIndex = .Grass
+
 				atlasIndex: float2 = ---
 
 				if chosenIndex != .Air {
-					column := i32(chosenIndex) % i32(tileWidth)
-					row := i32(chosenIndex) / i32(tileWidth)
+					column := i32(chosenIndex) % i32(tileRows)
+					row := i32(chosenIndex) / i32(tileRows)
 					atlasIndex = float2{f32(column), f32(row)}
 				} else {
 					atlasIndex = {-1, -1}
@@ -341,7 +309,7 @@ cube_init :: proc() {
 
 				cubes[x * GRID_Y_LEN * GRID_Z_LEN + y * GRID_Z_LEN + z] = CubeInfo {
 					worldPosition = worldPosition,
-					index         = atlasIndex,
+					atlasIndex    = u32(chosenIndex),
 				}
 			}
 		}
@@ -397,7 +365,7 @@ cube_draw :: proc(cmdBuf: ^^sdl.GPUCommandBuffer, renderPass: ^^sdl.GPURenderPas
 	}
 	#assert(len(cubeVertexBufferDescriptions) == len(bufferBindings))
 
-	atlasUbo: CubeAtlasUBO = {tileSize}
+	atlasUbo: CubeAtlasUBO = {ATLAS_NUM_OF_TILES, ATLAS_TILE_SIZE}
 
 	sdl.PushGPUVertexUniformData(cmdBuf^, 1, &atlasUbo, size_of(atlasUbo))
 	currVertexInfo.UBOs += 1
@@ -425,7 +393,7 @@ cube_draw :: proc(cmdBuf: ^^sdl.GPUCommandBuffer, renderPass: ^^sdl.GPURenderPas
 	sdl.DrawGPUIndexedPrimitives(
 		renderPass^,
 		len(cubeIndices),
-		GRID_X_LEN * GRID_X_LEN * GRID_Z_LEN,
+		GRID_X_LEN * GRID_Y_LEN * GRID_Z_LEN,
 		0,
 		0,
 		0,
@@ -433,7 +401,6 @@ cube_draw :: proc(cmdBuf: ^^sdl.GPUCommandBuffer, renderPass: ^^sdl.GPURenderPas
 }
 cube_deinit :: proc() {
 	sdl.ReleaseGPUBuffer(device, R_cube.positions)
-	sdl.ReleaseGPUBuffer(device, R_cube.colors)
 	sdl.ReleaseGPUBuffer(device, R_cube.uvs)
 	sdl.ReleaseGPUBuffer(device, R_cube.indices)
 	sdl.ReleaseGPUBuffer(device, R_cube.SBO)

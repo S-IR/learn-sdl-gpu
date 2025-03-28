@@ -12,7 +12,7 @@ struct VSOutput
 struct CubeData
 {
     float3 worldPosition;
-    float2 atlasIndex; 
+    float atlasIndex; 
 };
 StructuredBuffer<CubeData> CubesSBO : register(t0, space0);
 
@@ -24,6 +24,7 @@ cbuffer CameraUBO : register(b0, space1)
 
 
 cbuffer AtlasUBO: register(b1,space1){
+    float2 atlasTiles; 
     float2 atlasTileSize; 
 }
 
@@ -38,13 +39,19 @@ struct VSInput
 
 VSOutput main(VSInput input)
 {
-    
+
 
     VSOutput output;
     CubeData cube = CubesSBO[input.instanceId];
 
- 
-    output.uv = input.uv * atlasTileSize + cube.atlasIndex * atlasTileSize;
+     // Compute the tile coordinates in the atlas
+    float tileX = fmod(cube.atlasIndex, atlasTiles.x);
+    float tileY = floor(cube.atlasIndex / atlasTiles.x);
+
+    // Normalize to UV space
+    float2 baseUV = float2(tileX, tileY) * atlasTileSize;
+
+    output.uv = baseUV + input.uv * atlasTileSize;
 
     float4 worldPos= float4(input.position + cube.worldPosition, 1);
     float4 viewPos = mul(view, worldPos);

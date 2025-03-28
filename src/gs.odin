@@ -14,4 +14,4 @@ dt: f64
 
 nearPlane: f32 : 0.2
 farPlane: f32 : 160.0
-camera := Camera_new(pos = {10, 0, 10})
+camera := Camera_new(pos = {0, 0, 2})
