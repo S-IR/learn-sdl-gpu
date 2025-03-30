@@ -4,35 +4,31 @@
     "args": [],
     "tasks": [
         {
-            "label": "mkdir",
-            "type": "shell",
-            "command": "cmd",
-            "args": [
-                "/C",
-                "if not exist .\\build mkdir .\\build"
-            ]
-        },
-        {
             "label": "build",
             "type": "shell",
-            "command": "odin build src -o:none -debug -out:build/debug.exe",
-            "group": "build"
-        },
-        {
-            "label": "run",
-            "type": "shell",
-            "command": "odin run . -debug",
+            "command": "odin build src -debug -out:debug.exe -vet-shadowing",
             "group": {
                 "kind": "build",
                 "isDefault": true
             }
         },
         {
-            "label": "Build",
-            "dependsOn": [
-                "mkdir",
-                "build"
-            ]
+            "label": "run",
+            "type": "shell",
+            "command": "odin build  src  -vet-shadowing -debug -out:debug.exe; raddbg --ipc run",
+            "group": {
+                "kind": "none",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "build-release",
+            "type": "shell",
+            "command": "odin build src -o:speed -vet-shadowing -out:release.exe --show-timings",
+            "group": {
+                "kind": "none",
+                "isDefault": true
+            }
         },
     ]
 }

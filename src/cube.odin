@@ -179,9 +179,12 @@ cube_init :: proc() {
 		SBOs = 1,
 	}
 
+	vertexShaderFileName: string =
+		"cube.vertex.spv" when CHOSEN_GPU_BACKEND == .SPIRV else "cube.vertex.dxil"
+
 	vertexShader := load_shader(
 		filepath.join(
-			{"resources", "shader-binaries", "cube.vertex.spv"},
+			{"resources", "shader-binaries", vertexShaderFileName},
 			allocator = context.temp_allocator,
 		),
 		R_cube.vertexShaderInfo,
@@ -191,9 +194,13 @@ cube_init :: proc() {
 		samplers = 1,
 		UBOs     = 1,
 	}
+
+	fragmentShaderFileName: string =
+		"cube.fragment.spv" when CHOSEN_GPU_BACKEND == .SPIRV else "cube.fragment.dxil"
+
 	fragmentShader := load_shader(
 		filepath.join(
-			{"resources", "shader-binaries", "cube.fragment.spv"},
+			{"resources", "shader-binaries", fragmentShaderFileName},
 			allocator = context.temp_allocator,
 		),
 		R_cube.fragmentShaderInfo,
@@ -214,7 +221,7 @@ cube_init :: proc() {
 					},
 				),
 				has_depth_stencil_target = true,
-				depth_stencil_format = .D24_UNORM,
+				depth_stencil_format = .D24_UNORM_S8_UINT,
 			},
 			depth_stencil_state = sdl.GPUDepthStencilState {
 				enable_depth_test = true,
@@ -222,6 +229,7 @@ cube_init :: proc() {
 				enable_stencil_test = false,
 				compare_op = .LESS,
 				write_mask = 0xFF,
+				compare_mask = 0xFF,
 			},
 			rasterizer_state = {
 				cull_mode = .BACK,

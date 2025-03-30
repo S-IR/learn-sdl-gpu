@@ -41,10 +41,10 @@ when ODIN_DEBUG && ENABLE_SPALL {
 	}
 
 }
+CHOSEN_GPU_BACKEND :: sdl.GPUShaderFormatFlag.DXIL
 main :: proc() {
+	sdl.SetLogPriorities(.VERBOSE)
 	when ODIN_DEBUG {
-
-
 		track: mem.Tracking_Allocator
 		mem.tracking_allocator_init(&track, context.allocator)
 		context.allocator = mem.tracking_allocator(&track)
@@ -74,8 +74,6 @@ main :: proc() {
 
 			spall_buffer = spall.buffer_create(buffer_backing, u32(sync.current_thread_id()))
 			defer spall.buffer_destroy(&spall_ctx, &spall_buffer)
-
-
 		}
 
 	}
@@ -85,7 +83,7 @@ main :: proc() {
 	defer sdl.DestroyWindow(window)
 	sdl_ensure(sdl.SetWindowRelativeMouseMode(window, true))
 
-	device = sdl.CreateGPUDevice({.SPIRV}, ODIN_DEBUG, nil)
+	device = sdl.CreateGPUDevice({CHOSEN_GPU_BACKEND}, ODIN_DEBUG, nil)
 	sdl_ensure(device != nil)
 	defer sdl.DestroyGPUDevice(device)
 

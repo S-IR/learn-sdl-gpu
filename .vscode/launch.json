@@ -2,11 +2,11 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "type": "cppvsdbg",
+            "type": "lldb",
             "request": "launch",
-            "preLaunchTask": "Build",
+            "preLaunchTask": "build",
             "name": "Debug",
-            "program": "${workspaceFolder}/build/debug.exe",
+            "program": "${workspaceFolder}/debug.exe",
             "args": [],
             "cwd": "${workspaceFolder}"
         }
